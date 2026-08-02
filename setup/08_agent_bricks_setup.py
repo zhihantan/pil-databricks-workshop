@@ -133,7 +133,17 @@ except Exception as exc:  # noqa: BLE001
 # than SQL `ai_query(files => ...)`, whose image-arg typing varies by runtime.
 IMAGE_LOCAL = "/" + IMAGE_PATH.lstrip("/")
 try:
+    # List images via dbutils.fs (reliable on Volumes) rather than glob, which is
+    # unreliable on the FUSE mount in some serverless contexts.
+    img_files = [f.name for f in dbutils.fs.ls(IMAGE_PATH) if f.name.endswith(".png")]
+    print(f"  Found {len(img_files)} images under {IMAGE_PATH}")
     rows = agent_bricks.classify_container_images(IMAGE_LOCAL, endpoints.vision, llm)
+    if not rows:
+        raise RuntimeError(
+            f"No inspection rows produced (found {len(img_files)} image files at "
+            f"{IMAGE_LOCAL}). Check Volume readability and the vision endpoint "
+            f"'{endpoints.vision}'."
+        )
     (
         spark.createDataFrame(rows)
         .write.format("delta").mode("overwrite")
@@ -153,9 +163,22 @@ try:
         .orderBy("gt_damage", "pred_damage")
     )
 except Exception as exc:  # noqa: BLE001
+    import traceback as _tb
+    _trace = _tb.format_exc()
     warn(f"Vision pipeline failed: {exc}")
     print("  Ensure a multimodal FMAPI endpoint is available in-region "
           f"(chosen: {endpoints.vision}).")
+    # Persist the traceback to a UC table so it is inspectable off-platform
+    # (serverless notebook stdout is not returned by the Jobs run-output API).
+    try:
+        spark.createDataFrame(
+            [(endpoints.vision, str(exc)[:500], _trace[:4000])],
+            "endpoint STRING, error STRING, trace STRING",
+        ).write.format("delta").mode("overwrite").option(
+            "overwriteSchema", "true"
+        ).saveAsTable(f"`{CATALOG}`.`silver`.`_vision_debug`")
+    except Exception:  # noqa: BLE001
+        pass
 
 # COMMAND ----------
 
