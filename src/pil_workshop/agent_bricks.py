@@ -313,7 +313,8 @@ def classify_container_images(
             parsed = _json.loads(raw)
             row.update({k: parsed.get(k) for k in
                         ("damage", "damage_type", "confidence", "recommended_action")})
-        except Exception:  # noqa: BLE001 - keep a row even if one image fails
+        except Exception as _exc:  # noqa: BLE001 - keep a row even if one fails
             row["damage"] = "unknown"
+            row["recommended_action"] = f"ERR {type(_exc).__name__}: {str(_exc)[:220]}"
         rows.append(row)
     return rows
