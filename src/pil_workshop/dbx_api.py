@@ -525,7 +525,8 @@ def ensure_model_serving_endpoint(
             workload_size=workload_size,
             scale_to_zero_enabled=scale_to_zero,
         )
-        cfg = EndpointCoreConfigInput(served_entities=[served])
+        # Some SDK versions require `name` on EndpointCoreConfigInput.
+        cfg = EndpointCoreConfigInput(name=endpoint_name, served_entities=[served])
         try:
             wc.serving_endpoints.get(name=endpoint_name)
             return wc.serving_endpoints.update_config(name=endpoint_name, served_entities=[served])

@@ -231,10 +231,8 @@ try:
             warn(f"Champion is a baseline ({champion}); logging metrics only. "
                  "LightGBM is registered when it wins on WAPE.")
 except Exception as exc:  # noqa: BLE001
-    import traceback as _tb
     registry_error = f"{type(exc).__name__}: {exc}"
     warn(f"MLflow/UC registry step degraded: {exc}")
-    print(_tb.format_exc()[:1500])
 
 # COMMAND ----------
 
