@@ -34,3 +34,11 @@ yarn-error.log*
 .vscode/
 *.swp
 MASTER_PROMPT_PIL_WORKSHOP.md
+
+# Local MLflow tracking output (from running notebook 11 off-platform)
+setup/mlruns/
+setup/mlflow.db
+# TS/Vite compiled outputs
+app/frontend/vite.config.js
+app/frontend/vite.config.d.ts
+*.tsbuildinfo
