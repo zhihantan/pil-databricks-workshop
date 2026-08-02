@@ -56,3 +56,19 @@ passing tests; library has 12.
 - **Empty Container Repositioning Cost**: delivered as the `gold.repositioning_plan`
   table (from OR-Tools) rather than a metric view — the natural home for an
   optimization output.
+
+## Post-deployment fixes (live Job on fe-vm-zh-serverless)
+
+After the first green Job runs, four assets were found not fully materialized on
+the live workspace; all fixed and re-verified (the Job now recreates them from
+scratch in one unaided run):
+
+| Gap | Root cause | Fix |
+|---|---|---|
+| Genie space never created | Serverless runtime ships databricks-sdk 0.49 with **no `genie.create_space`** (added in 0.86); wrapper also passed wrong kwargs | Pin `databricks-sdk>=0.86` in the Job env; build the versioned `serialized_space` proto (`{"version":1,"data_sources":{"tables":[{"identifier":t}...sorted]}}`); handle `list_spaces().spaces` |
+| ML model registered with 0 versions; no serving endpoint | one-step `registered_model_name=` didn't attach a version; runtime mlflow 2.21 needs `log_model(artifact_path=)`; `EndpointCoreConfigInput` needs `name=` | Two-step `log_model`→`register_model` capturing the version (try `name=`, fall back to `artifact_path=`); set an experiment; serve the captured version; add `name=` to the endpoint config |
+| Dashboard Page 4 empty | `01b` usage views queried non-existent columns (`requesttime`, `served_entity_name`) | Use real schema `request_time` + join `system.serving.served_entities` for `endpoint_name`; 30-day window (now shows real gateway tokens/requests) |
+| App served "not built" placeholder | `app/backend/static` was gitignored, so the Git-folder deploy had no SPA | Commit the built bundle (Apps deploy has no build step); redeploy |
+
+Verified live: 13/13 Job tasks SUCCESS; Genie space, ML model + serving
+endpoint, populated Page-4 usage views, and a RUNNING app with the real SPA.
