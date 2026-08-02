@@ -267,17 +267,29 @@ def get_openai_client(token: str | None = None, client: Any | None = None) -> An
 
     api_key = token or os.environ.get("DATABRICKS_TOKEN")
     if not api_key:
-        # Inside notebooks/apps the SDK can mint a short-lived token.
+        # Inside notebooks/apps the SDK mints a short-lived token. Note that
+        # config.token is None under OAuth/SSO (common on serverless Jobs), so
+        # fall back to config.authenticate(), which returns an Authorization
+        # header for whatever auth the context has (OAuth, PAT, or ambient).
         try:  # pragma: no cover - platform-only
             from databricks.sdk import WorkspaceClient
 
             wc = client or WorkspaceClient()
-            api_key = wc.config.token  # type: ignore[assignment]
+            api_key = getattr(wc.config, "token", None)
+            if not api_key:
+                auth_header = wc.config.authenticate().get("Authorization", "")
+                if auth_header.lower().startswith("bearer "):
+                    api_key = auth_header.split(" ", 1)[1]
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError(
                 "No Databricks token available for FMAPI auth. Set "
                 "DATABRICKS_TOKEN or run inside a Databricks context."
             ) from exc
+        if not api_key:
+            raise RuntimeError(
+                "Could not obtain a Databricks token for FMAPI auth (config had "
+                "no token and authenticate() returned no bearer)."
+            )
 
     return OpenAI(api_key=api_key, base_url=openai_base_url(client))
 
