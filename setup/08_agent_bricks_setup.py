@@ -128,17 +128,25 @@ except Exception as exc:  # noqa: BLE001
 
 # COMMAND ----------
 
-vision_sql = agent_bricks.build_container_vision_sql(
-    CATALOG, endpoints.vision, IMAGE_PATH
-)
+# Vision runs through the Python `llm.chat` path (OpenAI-style multimodal
+# messages) — the same governed call the app backend uses. This is more robust
+# than SQL `ai_query(files => ...)`, whose image-arg typing varies by runtime.
+IMAGE_LOCAL = "/" + IMAGE_PATH.lstrip("/")
 try:
-    spark.sql(vision_sql)
+    rows = agent_bricks.classify_container_images(IMAGE_LOCAL, endpoints.vision, llm)
+    (
+        spark.createDataFrame(rows)
+        .write.format("delta").mode("overwrite")
+        .option("overwriteSchema", "true")
+        .saveAsTable(f"`{CATALOG}`.`silver`.`container_inspections`")
+    )
+    ok(f"Classified {len(rows)} containers → silver.container_inspections")
     spark.sql(agent_bricks.build_vision_scored_sql(CATALOG))
     scored = spark.table(f"`{CATALOG}`.`silver`.`container_inspections_scored`")
     total = scored.count()
     correct = scored.filter("is_correct = 1").count()
     acc = 100.0 * correct / total if total else 0.0
-    ok(f"Classified {total} containers · accuracy vs ground truth: {acc:.1f}%")
+    ok(f"Accuracy vs ground truth: {acc:.1f}% ({correct}/{total})")
     banner("Container vision eval (confusion by ground-truth class)", char="-")
     display(
         scored.groupBy("gt_damage", "pred_damage").count()

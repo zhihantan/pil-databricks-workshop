@@ -201,7 +201,12 @@ def create_metric_views(
         try:
             with open(path) as fh:
                 yaml_text = fh.read().replace("${catalog}", catalog)
-            # Metric views use a heredoc-style body; escape any $$ in content.
+            # The body is wrapped in a $$...$$ dollar-quote, so a literal '$$'
+            # anywhere inside (e.g. in a comment) would close the quote early and
+            # break parsing. Strip any '$$' — it is never valid in the YAML body.
+            if "$$" in yaml_text:
+                LOG.warning("Stripping stray '$$' from %s metric-view body.", fname)
+                yaml_text = yaml_text.replace("$$", "")
             spark.sql(
                 f"CREATE OR REPLACE VIEW {target} WITH METRICS LANGUAGE YAML AS $$\n{yaml_text}\n$$"
             )

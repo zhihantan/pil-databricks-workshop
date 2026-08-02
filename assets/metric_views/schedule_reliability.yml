@@ -1,5 +1,5 @@
 # Metric view: Schedule Reliability
-# Created via: CREATE VIEW ... WITH METRICS LANGUAGE YAML AS $$ <this> $$
+# Created via CREATE VIEW ... WITH METRICS LANGUAGE YAML (see gold_build.py).
 # A leg is "reliable" when it arrived within 24h of its pro-forma ETA
 # (on_time flag). Reliability % = reliable legs / total legs.
 version: 0.1

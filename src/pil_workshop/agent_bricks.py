@@ -236,3 +236,71 @@ FROM `{catalog}`.`silver`.`container_inspections` i
 JOIN `{catalog}`.`silver`.`container_image_labels` l
   ON i.file_name = l.file_name
 """.strip()
+
+
+# ---------------------------------------------------------------------------
+# Python-based container vision (reliable path).
+#
+# Passing images to a multimodal model via SQL ``ai_query(..., files => ...)``
+# is version/runtime-sensitive (the argument typing varies and errors with a
+# DATATYPE_MISMATCH on some serverless runtimes). The robust path — identical to
+# how the app backend does it — is to call the governed endpoint with an
+# OpenAI-style multimodal message per image through ``pil_workshop.llm.chat``.
+# ---------------------------------------------------------------------------
+def classify_container_images(
+    image_dir: str,
+    vision_endpoint: str,
+    llm_module: Any,
+    *,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """Classify every ``*.png`` in ``image_dir`` via the governed vision endpoint.
+
+    ``image_dir`` is a local/FUSE path to the images Volume (e.g.
+    ``/Volumes/<cat>/bronze/container_images``). Returns one dict per image with
+    the parsed inspection fields (``file_name`` + INSPECTION_SCHEMA keys),
+    tolerant of a model response that isn't clean JSON.
+    """
+    import base64
+    import glob
+    import json as _json
+    import os
+
+    files = sorted(glob.glob(os.path.join(image_dir, "*.png")))
+    if limit:
+        files = files[:limit]
+    rows: list[dict[str, Any]] = []
+    for path in files:
+        with open(path, "rb") as fh:
+            b64 = base64.b64encode(fh.read()).decode()
+        messages = [
+            {"role": "system", "content": VISION_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": VISION_USER_PROMPT},
+                    {"type": "image_url",
+                     "image_url": {"url": f"data:image/png;base64,{b64}"}},
+                ],
+            },
+        ]
+        row: dict[str, Any] = {
+            "file_name": os.path.basename(path),
+            "damage": None, "damage_type": None,
+            "confidence": None, "recommended_action": None,
+        }
+        try:
+            raw = llm_module.chat(
+                messages, endpoint=vision_endpoint, max_tokens=300,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {"name": "inspection", "schema": INSPECTION_SCHEMA},
+                },
+            )
+            parsed = _json.loads(raw)
+            row.update({k: parsed.get(k) for k in
+                        ("damage", "damage_type", "confidence", "recommended_action")})
+        except Exception:  # noqa: BLE001 - keep a row even if one image fails
+            row["damage"] = "unknown"
+        rows.append(row)
+    return rows

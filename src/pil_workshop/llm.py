@@ -44,18 +44,35 @@ LOG = get_logger("pil_workshop.llm")
 # Override any of these with PIL_TEXT_ENDPOINT / PIL_VISION_ENDPOINT /
 # PIL_EMBEDDING_ENDPOINT (env) or the matching notebook widget.
 # ---------------------------------------------------------------------------
+# Ordered current models first. FMAPI model names change over time and older
+# ones get DEPRECATED while still appearing in the endpoint listing (they return
+# HTTP 400 on call), so lead with current families and keep older names only as
+# late fallbacks. `resolve_endpoints` additionally skips names known-deprecated.
 PREFERRED_TEXT_ENDPOINTS: tuple[str, ...] = (
-    "databricks-claude-sonnet-4",
-    "databricks-claude-3-7-sonnet",
-    "databricks-meta-llama-3-3-70b-instruct",
-    "databricks-meta-llama-3-1-70b-instruct",
+    "databricks-claude-sonnet-4-5",
+    "databricks-claude-sonnet-4-6",
+    "databricks-claude-sonnet-5",
     "databricks-llama-4-maverick",
+    "databricks-meta-llama-3-3-70b-instruct",
+    "databricks-gpt-oss-120b",
+    "databricks-claude-sonnet-4",  # legacy fallback (may be deprecated)
 )
 PREFERRED_VISION_ENDPOINTS: tuple[str, ...] = (
+    "databricks-claude-sonnet-4-5",
+    "databricks-claude-sonnet-4-6",
+    "databricks-claude-sonnet-5",
+    "databricks-gemini-2-5-pro",
+    "databricks-llama-4-maverick",
+    "databricks-claude-sonnet-4",  # legacy fallback (may be deprecated)
+)
+
+# Endpoint names that are listed but no longer accept calls on some workspaces.
+# resolve_endpoints skips these unless explicitly requested via env override.
+KNOWN_DEPRECATED_ENDPOINTS: frozenset[str] = frozenset({
     "databricks-claude-sonnet-4",
     "databricks-claude-3-7-sonnet",
-    "databricks-llama-4-maverick",
-)
+    "databricks-meta-llama-3-1-70b-instruct",
+})
 PREFERRED_EMBEDDING_ENDPOINTS: tuple[str, ...] = (
     "databricks-gte-large-en",
     "databricks-bge-large-en",
@@ -116,9 +133,19 @@ def _list_served_endpoint_names(client: Any | None) -> set[str]:
 
 
 def _pick(preferred: tuple[str, ...], available: set[str], kind: str, notes: list[str]) -> str:
-    """Pick the first preferred endpoint that is available, else degrade."""
+    """Pick the first preferred endpoint that is available, else degrade.
+
+    Skips names in KNOWN_DEPRECATED_ENDPOINTS (listed but 400 on call) unless
+    nothing else is available.
+    """
+    for name in preferred:
+        if name in available and name not in KNOWN_DEPRECATED_ENDPOINTS:
+            return name
+    # Allow a deprecated preferred name only if nothing current is served.
     for name in preferred:
         if name in available:
+            notes.append(f"Using possibly-deprecated {kind} endpoint '{name}' "
+                         "(no current model served); set PIL_*_ENDPOINT to override.")
             return name
     # Nothing preferred is served. Fall back to any databricks-* endpoint that
     # looks like the right modality, and note the region caveat.
