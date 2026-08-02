@@ -15,6 +15,7 @@ export function UploadExtract() {
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const [result, setResult] = useState<ExtractedInvoice | null>(null);
 
   const upload = useMutation({
@@ -42,27 +43,37 @@ export function UploadExtract() {
   return (
     <>
       <PageHeader
-        title="Upload & Extract"
-        subtitle="Drop a freight-invoice PDF. It's saved to the pil_workshop volume, parsed with ai_parse_document, and extracted via ai_extract + ai_query into structured data."
+        title="Invoice Processing Agent"
+        subtitle="Drop a freight-invoice PDF. It's saved to the pil_workshop volume, parsed with ai_parse_document, and extracted via ai_extract + ai_query into structured fields, line items, and an exception flag."
       />
 
       <div
-        className="card"
-        style={{
-          marginBottom: 18,
-          borderStyle: "dashed",
-          textAlign: "center",
-          padding: 32,
+        className={`dropzone${dragging ? " drag" : ""}`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
         }}
-        onDragOver={(e) => e.preventDefault()}
+        onDragLeave={() => setDragging(false)}
         onDrop={(e) => {
           e.preventDefault();
+          setDragging(false);
           onPick(e.dataTransfer.files);
         }}
+        role="button"
+        tabIndex={0}
+        onClick={() => !upload.isPending && inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if ((e.key === "Enter" || e.key === " ") && !upload.isPending)
+            inputRef.current?.click();
+        }}
       >
-        <div style={{ fontSize: 34 }}>📄⬆️</div>
-        <p className="muted" style={{ margin: "8px 0 16px" }}>
-          Drag a PDF here, or
+        <div className="dropzone-emoji">{upload.isPending ? "⏳" : "🧾"}</div>
+        <div className="dropzone-title">
+          {upload.isPending ? "Uploading & extracting…" : "Drop a PDF invoice here"}
+        </div>
+        <p className="muted" style={{ margin: "6px 0 16px" }}>
+          or click to browse — try the samples in{" "}
+          <code>~/Desktop/pil_invoice_samples</code>
         </p>
         <input
           ref={inputRef}
@@ -74,7 +85,10 @@ export function UploadExtract() {
         <button
           className="btn btn-primary"
           disabled={upload.isPending}
-          onClick={() => inputRef.current?.click()}
+          onClick={(e) => {
+            e.stopPropagation();
+            inputRef.current?.click();
+          }}
         >
           {upload.isPending ? "Processing…" : "Choose a PDF invoice"}
         </button>
@@ -136,7 +150,7 @@ function ResultCard({ r }: { r: ExtractedInvoice }) {
           </span>
         </div>
         {mismatch && (
-          <p className="muted" style={{ color: "var(--coral)", marginTop: 8 }}>
+          <p className="muted" style={{ color: "var(--neg)", marginTop: 8 }}>
             ⚠ Total {currency(r.total)} ≠ subtotal + tax ({currency(computed)}).
           </p>
         )}

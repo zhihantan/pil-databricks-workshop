@@ -25,7 +25,7 @@ export function StatTile({
       <span className="stat-label">{label}</span>
       <span className="stat-value">
         {value}
-        {suffix && <span style={{ fontSize: 16, color: "var(--slate)" }}> {suffix}</span>}
+        {suffix && <span style={{ fontSize: 16, color: "var(--muted)" }}> {suffix}</span>}
       </span>
       <span className="stat-accent" />
     </div>

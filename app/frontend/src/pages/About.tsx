@@ -11,7 +11,7 @@ export function About() {
         <h2 className="section-title">Architecture</h2>
         <pre
           style={{
-            background: "var(--offwhite)",
+            background: "var(--surface-2)",
             padding: 18,
             borderRadius: 8,
             overflowX: "auto",

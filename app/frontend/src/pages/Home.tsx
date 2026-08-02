@@ -1,113 +1,122 @@
 import { useQuery } from "@tanstack/react-query";
-import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { PageHeader, Skeleton, StatTile } from "../components/ui";
 
 export function Home() {
   const kpis = useQuery({ queryKey: ["kpis"], queryFn: api.kpis });
-  const usage = useQuery({ queryKey: ["usage"], queryFn: api.usage });
+  const k = kpis.data;
 
   return (
     <>
       <PageHeader
-        title="Operations Home"
-        subtitle="Invoice processing, container inspections, and governed AI usage at a glance."
+        title="PIL AI Operations"
+        subtitle="Two production AI agents for a container shipping line — invoice processing and container image analysis — built on Databricks and governed by Unity AI Gateway."
       />
 
+      {/* Two agents front and center */}
+      <div className="hero-grid">
+        <AgentHero
+          to="/invoices/upload"
+          emoji="🧾"
+          title="Invoice Processing Agent"
+          desc="Upload freight invoices as PDFs. The agent parses (ai_parse_document), extracts fields and line items (ai_extract + ai_query), and flags exceptions."
+          stats={
+            kpis.isLoading
+              ? null
+              : [
+                  { num: k?.invoices_processed ?? 0, lbl: "Invoices processed" },
+                  { num: k?.pending_reviews ?? 0, lbl: "Pending review" },
+                ]
+          }
+          cta="Process an invoice →"
+        />
+        <AgentHero
+          to="/inspections"
+          emoji="📦"
+          title="Container Analysis Agent"
+          desc="Multimodal vision inspects container images for structural damage — classifying none / minor / major with confidence and a recommended action."
+          stats={
+            kpis.isLoading
+              ? null
+              : [
+                  { num: k?.containers_inspected ?? 0, lbl: "Containers analyzed" },
+                  {
+                    num:
+                      k?.inspection_accuracy_pct != null
+                        ? `${k.inspection_accuracy_pct}%`
+                        : "—",
+                    lbl: "Accuracy vs truth",
+                  },
+                ]
+          }
+          cta="View inspections →"
+        />
+      </div>
+
+      {/* Fleet KPI strip (context, not the focus) */}
       <div className="grid grid-4">
         {kpis.isLoading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="card">
-              <Skeleton height={48} />
+              <Skeleton height={44} />
             </div>
           ))
         ) : (
           <>
-            <StatTile
-              label="Pending invoice reviews"
-              value={kpis.data?.pending_reviews ?? 0}
-            />
-            <StatTile
-              label="Containers inspected"
-              value={kpis.data?.containers_inspected ?? 0}
-            />
-            <StatTile
-              label="Schedule reliability"
-              value={kpis.data?.schedule_reliability_pct ?? "—"}
-              suffix="%"
-            />
-            <StatTile
-              label="Vessel utilization"
-              value={kpis.data?.vessel_utilization_pct ?? "—"}
-              suffix="%"
-            />
+            <StatTile label="Schedule reliability" value={k?.schedule_reliability_pct ?? "—"} suffix="%" />
+            <StatTile label="Vessel utilization" value={k?.vessel_utilization_pct ?? "—"} suffix="%" />
+            <StatTile label="Open work orders" value={k?.open_work_orders ?? 0} />
+            <StatTile label="Invoices processed" value={k?.invoices_processed ?? 0} />
           </>
         )}
       </div>
 
-      <div className="grid grid-2" style={{ marginTop: 18 }}>
-        <div className="card">
-          <h2 className="section-title">Governed AI usage (Unity AI Gateway)</h2>
-          {usage.isLoading ? (
-            <Skeleton height={160} />
-          ) : (
-            <>
-              <div className="usage-row" style={{ marginBottom: 12 }}>
-                <StatInline label="Tokens today" value={usage.data?.today_tokens ?? 0} />
-                <StatInline label="Requests" value={usage.data?.today_requests ?? 0} />
-                <StatInline
-                  label="Est. cost"
-                  value={`$${(usage.data?.today_cost_usd ?? 0).toFixed(2)}`}
-                />
-              </div>
-              <ResponsiveContainer width="100%" height={150}>
-                <AreaChart data={usage.data?.series ?? []}>
-                  <defs>
-                    <linearGradient id="tealGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#0E7C86" stopOpacity={0.5} />
-                      <stop offset="100%" stopColor="#0E7C86" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="usage_date" hide />
-                  <YAxis hide />
-                  <Tooltip />
-                  <Area
-                    type="monotone"
-                    dataKey="total_tokens"
-                    stroke="#0E7C86"
-                    strokeWidth={2}
-                    fill="url(#tealGrad)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-              <p className="muted">
-                Traffic from notebooks and this app share the same governed endpoints —
-                this widget mirrors dashboard Page 4.
-              </p>
-            </>
-          )}
-        </div>
-
-        <div className="card">
-          <h2 className="section-title">What you built</h2>
-          <ol className="muted" style={{ lineHeight: 1.9, paddingLeft: 18 }}>
-            <li>Medallion shipping data → Gold KPIs & metric views</li>
-            <li>AI/BI dashboard + Genie space over the gold layer</li>
-            <li>Invoice extraction & container vision on governed FMAPI</li>
-            <li>This app: Lakebase review queue + work orders</li>
-            <li>Forecasting & route optimization (ML notebooks)</li>
-          </ol>
-        </div>
+      <div className="card" style={{ marginTop: 18 }}>
+        <h2 className="section-title">Governed by Unity AI Gateway</h2>
+        <p className="muted" style={{ margin: 0 }}>
+          Both agents call the same governed Foundation Model endpoint — no external
+          providers. Every request is rate-limited and usage-tracked.{" "}
+          <Link to="/gateway">View AI Gateway usage →</Link>
+        </p>
       </div>
     </>
   );
 }
 
-function StatInline({ label, value }: { label: string; value: string | number }) {
+function AgentHero({
+  to,
+  emoji,
+  title,
+  desc,
+  stats,
+  cta,
+}: {
+  to: string;
+  emoji: string;
+  title: string;
+  desc: string;
+  stats: { num: number | string; lbl: string }[] | null;
+  cta: string;
+}) {
   return (
-    <div>
-      <div className="muted">{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: "var(--navy)" }}>{value}</div>
-    </div>
+    <Link to={to} className="hero-card">
+      <div className="hero-emoji">{emoji}</div>
+      <h3 className="hero-title">{title}</h3>
+      <p className="hero-desc">{desc}</p>
+      <div className="hero-stats">
+        {stats
+          ? stats.map((s, i) => (
+              <div key={i}>
+                <div className="hero-stat-num">{s.num}</div>
+                <div className="hero-stat-lbl">{s.lbl}</div>
+              </div>
+            ))
+          : Array.from({ length: 2 }).map((_, i) => (
+              <Skeleton key={i} height={38} width="90px" />
+            ))}
+      </div>
+      <div className="hero-cta">{cta}</div>
+    </Link>
   );
 }

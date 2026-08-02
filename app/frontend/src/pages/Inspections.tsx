@@ -9,6 +9,7 @@ import {
   EmptyState,
   PageHeader,
   Skeleton,
+  StatTile,
 } from "../components/ui";
 
 export function Inspections() {
@@ -44,13 +45,26 @@ export function Inspections() {
   });
 
   const items = list.data ?? [];
+  const norm = (d?: string | null) => (d ?? "").toLowerCase();
+  const majorCount = items.filter((i) => norm(i.damage).includes("major")).length;
+  const minorCount = items.filter((i) => norm(i.damage).includes("minor")).length;
+  const flagged = majorCount + minorCount;
 
   return (
     <>
       <PageHeader
-        title="Container Inspections"
-        subtitle="Damage classification from the governed multimodal endpoint. Create work orders for flagged containers."
+        title="Container Analysis Agent"
+        subtitle="Multimodal vision inspects each container image through the governed FMAPI endpoint — classifying damage, scoring confidence, and recommending an action. Click a container to review or raise a work order."
       />
+
+      {!list.isLoading && items.length > 0 && (
+        <div className="grid grid-4" style={{ marginBottom: 18 }}>
+          <StatTile label="Containers analyzed" value={items.length} />
+          <StatTile label="Flagged for action" value={flagged} />
+          <StatTile label="Major damage" value={majorCount} />
+          <StatTile label="Minor damage" value={minorCount} />
+        </div>
+      )}
 
       {list.isLoading ? (
         <div className="gallery">
