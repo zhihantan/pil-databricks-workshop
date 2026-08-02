@@ -1,0 +1,47 @@
+# Databricks App definition — PIL Invoice + Container Vision.
+#
+# The app serves the built Vite bundle from backend/static and the FastAPI API.
+# It authenticates as the app's service principal (Databricks Apps built-in
+# auth); no PATs are stored anywhere. On-behalf-of-user calls use the
+# X-Forwarded-Access-Token header where user auth is enabled.
+#
+# Command: start uvicorn against the FastAPI app.
+command:
+  - "uvicorn"
+  - "backend.main:app"
+  - "--host"
+  - "0.0.0.0"
+  - "--port"
+  - "8000"
+
+env:
+  # Catalog the app reads analytics from (override per deployment).
+  - name: PIL_CATALOG
+    value: "pil_workshop"
+  # Lakebase instance name; app mints its own credential via the SDK.
+  - name: PIL_LAKEBASE_INSTANCE
+    value: "pil-workshop-db"
+  # Endpoint overrides are optional — llm.py auto-discovers otherwise.
+  # - name: PIL_TEXT_ENDPOINT
+  #   value: "databricks-claude-sonnet-4"
+
+# ---------------------------------------------------------------------------
+# Resources the app's service principal needs access to. Grant these when
+# deploying (also documented in docs/participant_guide.md):
+#   * sql_warehouse   — CAN USE, for Unity Catalog reads via the SQL connector.
+#   * serving_endpoint — CAN QUERY on the governed FMAPI text + vision endpoints
+#                        so app model traffic appears on Dashboard Page 4.
+#   * database (Lakebase) — CAN CONNECT to the pil-workshop-db instance.
+#   * volume          — READ VOLUME on bronze.raw_invoices + bronze.container_images
+#                        for PDF/image previews.
+# Declare them in the Databricks App UI (Resources) or via the Apps API.
+# ---------------------------------------------------------------------------
+resources:
+  - name: sql-warehouse
+    description: "Serverless SQL warehouse for Unity Catalog reads"
+  - name: text-endpoint
+    description: "Governed FMAPI text endpoint (invoice extraction)"
+  - name: vision-endpoint
+    description: "Governed FMAPI multimodal endpoint (container inspection)"
+  - name: lakebase
+    description: "Lakebase Postgres instance (review queue, decisions)"

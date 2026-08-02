@@ -1,0 +1,1286 @@
+{
+  "datasets": [
+    {
+      "name": "ds_daily_ops",
+      "displayName": "Daily Operations KPIs",
+      "queryLines": [
+        "SELECT * FROM ${catalog}.gold.mv_daily_operations_kpis ORDER BY operations_date"
+      ]
+    },
+    {
+      "name": "ds_port_perf",
+      "displayName": "Port Performance",
+      "queryLines": [
+        "SELECT * FROM ${catalog}.gold.mv_port_performance ORDER BY avg_turnaround_hrs DESC"
+      ]
+    },
+    {
+      "name": "ds_customer_rev",
+      "displayName": "Customer Revenue",
+      "queryLines": [
+        "SELECT * FROM ${catalog}.gold.mv_customer_revenue ORDER BY freight_revenue_usd DESC"
+      ]
+    },
+    {
+      "name": "ds_container_util",
+      "displayName": "Container Utilization",
+      "queryLines": [
+        "SELECT * FROM ${catalog}.gold.mv_container_utilization ORDER BY operations_date"
+      ]
+    },
+    {
+      "name": "ds_revenue_lane",
+      "displayName": "Revenue by Trade Lane",
+      "queryLines": [
+        "SELECT trade_lane, ROUND(SUM(freight_revenue_usd + dd_revenue_usd), 0) AS revenue_usd, SUM(teu) AS teu, ROUND(SUM(freight_revenue_usd + dd_revenue_usd)/NULLIF(SUM(teu),0),0) AS revenue_per_teu FROM ${catalog}.gold._rev_base GROUP BY trade_lane ORDER BY revenue_usd DESC"
+      ]
+    },
+    {
+      "name": "ds_revenue_month",
+      "displayName": "Revenue per TEU Trend",
+      "queryLines": [
+        "SELECT DATE_TRUNC('MONTH', revenue_date) AS month, ROUND(SUM(freight_revenue_usd + dd_revenue_usd)/NULLIF(SUM(teu),0),0) AS revenue_per_teu, ROUND(SUM(dd_revenue_usd),0) AS dd_revenue FROM ${catalog}.gold._rev_base GROUP BY 1 ORDER BY 1"
+      ]
+    },
+    {
+      "name": "ds_sustainability",
+      "displayName": "Sustainability",
+      "queryLines": [
+        "SELECT DATE_TRUNC('MONTH', leg_date) AS month, vessel_class, fuel_type, ROUND(SUM(fuel_consumed_mt)/NULLIF(SUM(teu_nm)/1000.0,0),4) AS fuel_eff, ROUND(SUM(co2_mt)*1000.0/NULLIF(SUM(teu_nm)*1.852,0),4) AS co2_per_teu_km FROM ${catalog}.gold._sustainability_base GROUP BY 1,2,3 ORDER BY 1"
+      ]
+    },
+    {
+      "name": "ds_ai_usage_daily",
+      "displayName": "AI Usage Daily",
+      "queryLines": [
+        "SELECT * FROM ${catalog}.gold.v_ai_usage_daily ORDER BY usage_date"
+      ]
+    },
+    {
+      "name": "ds_ai_usage_endpoint",
+      "displayName": "AI Usage by Endpoint",
+      "queryLines": [
+        "SELECT * FROM ${catalog}.gold.v_ai_usage_by_endpoint ORDER BY total_tokens DESC"
+      ]
+    },
+    {
+      "name": "ds_ai_usage_user",
+      "displayName": "AI Usage by User",
+      "queryLines": [
+        "SELECT * FROM ${catalog}.gold.v_ai_usage_by_user ORDER BY total_tokens DESC"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "page_ops",
+      "displayName": "Fleet & Network Ops",
+      "layout": [
+        {
+          "widget": {
+            "name": "ops_hdr",
+            "spec": {
+              "version": 1,
+              "widgetType": "text",
+              "spec": {
+                "text": "## \ud83d\udea2 Fleet & Network Operations\nDeep navy `#0B1F3A` \u00b7 ocean teal `#0E7C86` \u00b7 signal amber `#F5A623`"
+              }
+            },
+            "textbox_spec": "## \ud83d\udea2 Fleet & Network Operations\nDeep navy `#0B1F3A` \u00b7 ocean teal `#0E7C86` \u00b7 signal amber `#F5A623`"
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "c_reliability",
+            "queries": [
+              {
+                "name": "q_c_reliability",
+                "query": {
+                  "datasetName": "ds_daily_ops",
+                  "fields": [
+                    {
+                      "name": "schedule_reliability_pct",
+                      "expression": "`schedule_reliability_pct`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "schedule_reliability_pct",
+                  "displayName": "Schedule Reliability %"
+                }
+              },
+              "frame": {
+                "title": "Schedule Reliability %",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "c_util",
+            "queries": [
+              {
+                "name": "q_c_util",
+                "query": {
+                  "datasetName": "ds_daily_ops",
+                  "fields": [
+                    {
+                      "name": "vessel_utilization_pct",
+                      "expression": "`vessel_utilization_pct`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "vessel_utilization_pct",
+                  "displayName": "Vessel Utilization %"
+                }
+              },
+              "frame": {
+                "title": "Vessel Utilization %",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 1,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "c_delay",
+            "queries": [
+              {
+                "name": "q_c_delay",
+                "query": {
+                  "datasetName": "ds_daily_ops",
+                  "fields": [
+                    {
+                      "name": "avg_arrival_delay_hrs",
+                      "expression": "`avg_arrival_delay_hrs`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "avg_arrival_delay_hrs",
+                  "displayName": "Avg Arrival Delay (hrs)"
+                }
+              },
+              "frame": {
+                "title": "Avg Arrival Delay (hrs)",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 1,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "l_reliability",
+            "queries": [
+              {
+                "name": "q_l_reliability",
+                "query": {
+                  "datasetName": "ds_daily_ops",
+                  "fields": [
+                    {
+                      "name": "operations_date",
+                      "expression": "`operations_date`"
+                    },
+                    {
+                      "name": "schedule_reliability_pct",
+                      "expression": "`schedule_reliability_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "operations_date",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "operations_date"
+                },
+                "y": {
+                  "fieldName": "schedule_reliability_pct",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "schedule_reliability_pct"
+                }
+              },
+              "frame": {
+                "title": "Schedule Reliability Trend",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 3,
+            "width": 6,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "s_port",
+            "queries": [
+              {
+                "name": "q_s_port",
+                "query": {
+                  "datasetName": "ds_port_perf",
+                  "fields": [
+                    {
+                      "name": "avg_waiting_hrs",
+                      "expression": "`avg_waiting_hrs`"
+                    },
+                    {
+                      "name": "avg_turnaround_hrs",
+                      "expression": "`avg_turnaround_hrs`"
+                    },
+                    {
+                      "name": "total_crane_moves",
+                      "expression": "`total_crane_moves`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "scatter",
+              "encodings": {
+                "x": {
+                  "fieldName": "avg_waiting_hrs",
+                  "displayName": "avg_waiting_hrs"
+                },
+                "y": {
+                  "fieldName": "avg_turnaround_hrs",
+                  "displayName": "avg_turnaround_hrs"
+                },
+                "size": {
+                  "fieldName": "total_crane_moves",
+                  "displayName": "total_crane_moves"
+                }
+              },
+              "frame": {
+                "title": "Port Performance (waiting vs turnaround)",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "t_worst_ports",
+            "queries": [
+              {
+                "name": "q_t_worst_ports",
+                "query": {
+                  "datasetName": "ds_port_perf",
+                  "fields": [
+                    {
+                      "name": "port_name",
+                      "expression": "`port_name`"
+                    },
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    },
+                    {
+                      "name": "avg_turnaround_hrs",
+                      "expression": "`avg_turnaround_hrs`"
+                    },
+                    {
+                      "name": "avg_waiting_hrs",
+                      "expression": "`avg_waiting_hrs`"
+                    },
+                    {
+                      "name": "port_calls",
+                      "expression": "`port_calls`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "port_name",
+                    "displayName": "port_name"
+                  },
+                  {
+                    "fieldName": "region",
+                    "displayName": "region"
+                  },
+                  {
+                    "fieldName": "avg_turnaround_hrs",
+                    "displayName": "avg_turnaround_hrs"
+                  },
+                  {
+                    "fieldName": "avg_waiting_hrs",
+                    "displayName": "avg_waiting_hrs"
+                  },
+                  {
+                    "fieldName": "port_calls",
+                    "displayName": "port_calls"
+                  }
+                ]
+              },
+              "frame": {
+                "title": "Worst-10 Ports by Turnaround",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 6,
+            "width": 3,
+            "height": 3
+          }
+        }
+      ]
+    },
+    {
+      "name": "page_commercial",
+      "displayName": "Commercial",
+      "layout": [
+        {
+          "widget": {
+            "name": "com_hdr",
+            "spec": {
+              "version": 1,
+              "widgetType": "text",
+              "spec": {
+                "text": "## \ud83d\udcb0 Commercial"
+              }
+            },
+            "textbox_spec": "## \ud83d\udcb0 Commercial"
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "l_rev_teu",
+            "queries": [
+              {
+                "name": "q_l_rev_teu",
+                "query": {
+                  "datasetName": "ds_revenue_month",
+                  "fields": [
+                    {
+                      "name": "month",
+                      "expression": "`month`"
+                    },
+                    {
+                      "name": "revenue_per_teu",
+                      "expression": "`revenue_per_teu`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "month",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "month"
+                },
+                "y": {
+                  "fieldName": "revenue_per_teu",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "revenue_per_teu"
+                }
+              },
+              "frame": {
+                "title": "Revenue per TEU Trend",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "l_dd",
+            "queries": [
+              {
+                "name": "q_l_dd",
+                "query": {
+                  "datasetName": "ds_revenue_month",
+                  "fields": [
+                    {
+                      "name": "month",
+                      "expression": "`month`"
+                    },
+                    {
+                      "name": "dd_revenue",
+                      "expression": "`dd_revenue`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "month",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "month"
+                },
+                "y": {
+                  "fieldName": "dd_revenue",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "dd_revenue"
+                }
+              },
+              "frame": {
+                "title": "Demurrage & Detention Revenue",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 1,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "b_lane",
+            "queries": [
+              {
+                "name": "q_b_lane",
+                "query": {
+                  "datasetName": "ds_revenue_lane",
+                  "fields": [
+                    {
+                      "name": "trade_lane",
+                      "expression": "`trade_lane`"
+                    },
+                    {
+                      "name": "revenue_usd",
+                      "expression": "`revenue_usd`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "revenue_usd",
+                  "displayName": "trade_lane"
+                },
+                "y": {
+                  "fieldName": "trade_lane",
+                  "displayName": "revenue_usd"
+                },
+                "color": {
+                  "scale": {
+                    "colors": [
+                      "#0E7C86",
+                      "#F5A623",
+                      "#0B1F3A",
+                      "#5BB8B0",
+                      "#E4572E",
+                      "#5B6B7B"
+                    ]
+                  }
+                }
+              },
+              "frame": {
+                "title": "Revenue by Trade Lane",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 4,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "t_customers",
+            "queries": [
+              {
+                "name": "q_t_customers",
+                "query": {
+                  "datasetName": "ds_customer_rev",
+                  "fields": [
+                    {
+                      "name": "customer_name",
+                      "expression": "`customer_name`"
+                    },
+                    {
+                      "name": "customer_type",
+                      "expression": "`customer_type`"
+                    },
+                    {
+                      "name": "industry",
+                      "expression": "`industry`"
+                    },
+                    {
+                      "name": "freight_revenue_usd",
+                      "expression": "`freight_revenue_usd`"
+                    },
+                    {
+                      "name": "teu",
+                      "expression": "`teu`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "customer_name",
+                    "displayName": "customer_name"
+                  },
+                  {
+                    "fieldName": "customer_type",
+                    "displayName": "customer_type"
+                  },
+                  {
+                    "fieldName": "industry",
+                    "displayName": "industry"
+                  },
+                  {
+                    "fieldName": "freight_revenue_usd",
+                    "displayName": "freight_revenue_usd"
+                  },
+                  {
+                    "fieldName": "teu",
+                    "displayName": "teu"
+                  }
+                ]
+              },
+              "frame": {
+                "title": "Top Customers by Revenue",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 4,
+            "width": 3,
+            "height": 3
+          }
+        }
+      ]
+    },
+    {
+      "name": "page_sustainability",
+      "displayName": "Sustainability",
+      "layout": [
+        {
+          "widget": {
+            "name": "sus_hdr",
+            "spec": {
+              "version": 1,
+              "widgetType": "text",
+              "spec": {
+                "text": "## \ud83c\udf31 Sustainability (IMO CII flavor)"
+              }
+            },
+            "textbox_spec": "## \ud83c\udf31 Sustainability (IMO CII flavor)"
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "l_fuel_eff",
+            "queries": [
+              {
+                "name": "q_l_fuel_eff",
+                "query": {
+                  "datasetName": "ds_sustainability",
+                  "fields": [
+                    {
+                      "name": "month",
+                      "expression": "`month`"
+                    },
+                    {
+                      "name": "fuel_eff",
+                      "expression": "`fuel_eff`"
+                    },
+                    {
+                      "name": "vessel_class",
+                      "expression": "`vessel_class`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "month",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "month"
+                },
+                "y": {
+                  "fieldName": "fuel_eff",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "fuel_eff"
+                },
+                "color": {
+                  "fieldName": "vessel_class",
+                  "scale": {
+                    "type": "categorical",
+                    "colors": [
+                      "#0E7C86",
+                      "#F5A623",
+                      "#0B1F3A",
+                      "#5BB8B0",
+                      "#E4572E",
+                      "#5B6B7B"
+                    ]
+                  }
+                }
+              },
+              "frame": {
+                "title": "Fuel Efficiency (mt / 1k TEU-nm)",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 6,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "b_co2_class",
+            "queries": [
+              {
+                "name": "q_b_co2_class",
+                "query": {
+                  "datasetName": "ds_sustainability",
+                  "fields": [
+                    {
+                      "name": "vessel_class",
+                      "expression": "`vessel_class`"
+                    },
+                    {
+                      "name": "co2_per_teu_km",
+                      "expression": "`co2_per_teu_km`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "vessel_class",
+                  "displayName": "vessel_class"
+                },
+                "y": {
+                  "fieldName": "co2_per_teu_km",
+                  "displayName": "co2_per_teu_km"
+                },
+                "color": {
+                  "scale": {
+                    "colors": [
+                      "#0E7C86",
+                      "#F5A623",
+                      "#0B1F3A",
+                      "#5BB8B0",
+                      "#E4572E",
+                      "#5B6B7B"
+                    ]
+                  }
+                }
+              },
+              "frame": {
+                "title": "CO\u2082 per TEU-km by Vessel Class",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 4,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "b_fuel_type",
+            "queries": [
+              {
+                "name": "q_b_fuel_type",
+                "query": {
+                  "datasetName": "ds_sustainability",
+                  "fields": [
+                    {
+                      "name": "fuel_type",
+                      "expression": "`fuel_type`"
+                    },
+                    {
+                      "name": "fuel_eff",
+                      "expression": "`fuel_eff`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "fuel_type",
+                  "displayName": "fuel_type"
+                },
+                "y": {
+                  "fieldName": "fuel_eff",
+                  "displayName": "fuel_eff"
+                },
+                "color": {
+                  "scale": {
+                    "colors": [
+                      "#0E7C86",
+                      "#F5A623",
+                      "#0B1F3A",
+                      "#5BB8B0",
+                      "#E4572E",
+                      "#5B6B7B"
+                    ]
+                  }
+                }
+              },
+              "frame": {
+                "title": "LNG vs VLSFO Fuel Efficiency",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 4,
+            "width": 3,
+            "height": 3
+          }
+        }
+      ]
+    },
+    {
+      "name": "page_ai_governance",
+      "displayName": "AI Usage & Governance",
+      "layout": [
+        {
+          "widget": {
+            "name": "ai_hdr",
+            "spec": {
+              "version": 1,
+              "widgetType": "text",
+              "spec": {
+                "text": "## \ud83e\udd16 AI Usage & Governance\nLive Unity AI Gateway usage \u2014 populates as participants run Part 2."
+              }
+            },
+            "textbox_spec": "## \ud83e\udd16 AI Usage & Governance\nLive Unity AI Gateway usage \u2014 populates as participants run Part 2."
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "c_tokens",
+            "queries": [
+              {
+                "name": "q_c_tokens",
+                "query": {
+                  "datasetName": "ds_ai_usage_daily",
+                  "fields": [
+                    {
+                      "name": "total_tokens",
+                      "expression": "`total_tokens`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "total_tokens",
+                  "displayName": "Total Tokens"
+                }
+              },
+              "frame": {
+                "title": "Total Tokens",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "c_requests",
+            "queries": [
+              {
+                "name": "q_c_requests",
+                "query": {
+                  "datasetName": "ds_ai_usage_daily",
+                  "fields": [
+                    {
+                      "name": "request_count",
+                      "expression": "`request_count`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "request_count",
+                  "displayName": "Requests"
+                }
+              },
+              "frame": {
+                "title": "Requests",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 1,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "c_cost",
+            "queries": [
+              {
+                "name": "q_c_cost",
+                "query": {
+                  "datasetName": "ds_ai_usage_daily",
+                  "fields": [
+                    {
+                      "name": "est_cost_usd",
+                      "expression": "`est_cost_usd`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "est_cost_usd",
+                  "displayName": "Est. Cost (USD)"
+                }
+              },
+              "frame": {
+                "title": "Est. Cost (USD)",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 1,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "l_tokens",
+            "queries": [
+              {
+                "name": "q_l_tokens",
+                "query": {
+                  "datasetName": "ds_ai_usage_daily",
+                  "fields": [
+                    {
+                      "name": "usage_date",
+                      "expression": "`usage_date`"
+                    },
+                    {
+                      "name": "total_tokens",
+                      "expression": "`total_tokens`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "usage_date",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "usage_date"
+                },
+                "y": {
+                  "fieldName": "total_tokens",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "total_tokens"
+                }
+              },
+              "frame": {
+                "title": "Tokens per Day",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 3,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "l_errors",
+            "queries": [
+              {
+                "name": "q_l_errors",
+                "query": {
+                  "datasetName": "ds_ai_usage_daily",
+                  "fields": [
+                    {
+                      "name": "usage_date",
+                      "expression": "`usage_date`"
+                    },
+                    {
+                      "name": "error_count",
+                      "expression": "`error_count`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "usage_date",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "usage_date"
+                },
+                "y": {
+                  "fieldName": "error_count",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "error_count"
+                }
+              },
+              "frame": {
+                "title": "Errors per Day",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 3,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "t_endpoints",
+            "queries": [
+              {
+                "name": "q_t_endpoints",
+                "query": {
+                  "datasetName": "ds_ai_usage_endpoint",
+                  "fields": [
+                    {
+                      "name": "endpoint",
+                      "expression": "`endpoint`"
+                    },
+                    {
+                      "name": "request_count",
+                      "expression": "`request_count`"
+                    },
+                    {
+                      "name": "total_tokens",
+                      "expression": "`total_tokens`"
+                    },
+                    {
+                      "name": "error_count",
+                      "expression": "`error_count`"
+                    },
+                    {
+                      "name": "est_cost_usd",
+                      "expression": "`est_cost_usd`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "endpoint",
+                    "displayName": "endpoint"
+                  },
+                  {
+                    "fieldName": "request_count",
+                    "displayName": "request_count"
+                  },
+                  {
+                    "fieldName": "total_tokens",
+                    "displayName": "total_tokens"
+                  },
+                  {
+                    "fieldName": "error_count",
+                    "displayName": "error_count"
+                  },
+                  {
+                    "fieldName": "est_cost_usd",
+                    "displayName": "est_cost_usd"
+                  }
+                ]
+              },
+              "frame": {
+                "title": "Usage by Endpoint",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "t_users",
+            "queries": [
+              {
+                "name": "q_t_users",
+                "query": {
+                  "datasetName": "ds_ai_usage_user",
+                  "fields": [
+                    {
+                      "name": "user_name",
+                      "expression": "`user_name`"
+                    },
+                    {
+                      "name": "request_count",
+                      "expression": "`request_count`"
+                    },
+                    {
+                      "name": "total_tokens",
+                      "expression": "`total_tokens`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "user_name",
+                    "displayName": "user_name"
+                  },
+                  {
+                    "fieldName": "request_count",
+                    "displayName": "request_count"
+                  },
+                  {
+                    "fieldName": "total_tokens",
+                    "displayName": "total_tokens"
+                  }
+                ]
+              },
+              "frame": {
+                "title": "Usage by User",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 6,
+            "width": 3,
+            "height": 3
+          }
+        }
+      ]
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "colors": [
+        "#0E7C86",
+        "#F5A623",
+        "#0B1F3A",
+        "#5BB8B0",
+        "#E4572E",
+        "#5B6B7B"
+      ]
+    }
+  }
+}

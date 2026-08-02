@@ -1,0 +1,17 @@
+# Metric view: On-Time Delivery & Transit Time
+# On-time delivery uses the same 24h tolerance; transit time is ATA-ETD hours.
+version: 0.1
+source: ${catalog}.silver.voyage_legs
+filter: ata IS NOT NULL AND etd IS NOT NULL
+dimensions:
+  - name: Arrival Month
+    expr: DATE_TRUNC('MONTH', ata)
+  - name: Destination Port
+    expr: dest_port_id
+measures:
+  - name: Deliveries
+    expr: COUNT(1)
+  - name: On-Time Delivery %
+    expr: ROUND(100.0 * SUM(CASE WHEN on_time THEN 1 ELSE 0 END) / NULLIF(COUNT(1), 0), 1)
+  - name: Average Transit Time (hrs)
+    expr: ROUND(AVG((UNIX_TIMESTAMP(ata) - UNIX_TIMESTAMP(etd)) / 3600.0), 1)

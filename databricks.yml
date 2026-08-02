@@ -1,0 +1,50 @@
+# Databricks Asset Bundle (DAB) — OPTIONAL deploy path.
+#
+# The notebook path works standalone: clone via Git Folders and run
+# setup/00_setup_all. This bundle is an alternative for teams that use DABs to
+# deploy the setup job and the app definition.
+#
+# Usage:
+#   databricks bundle validate
+#   databricks bundle deploy -t dev
+#   databricks bundle run pil_workshop_setup -t dev
+bundle:
+  name: pil-databricks-workshop
+
+variables:
+  catalog:
+    description: Target Unity Catalog catalog.
+    default: pil_workshop
+  scale:
+    description: Data scale (demo|full).
+    default: demo
+
+targets:
+  dev:
+    mode: development
+    default: true
+    # Set your workspace host here or via DATABRICKS_HOST / profile.
+    # workspace:
+    #   host: https://adb-XXXX.XX.azuredatabricks.net
+
+resources:
+  jobs:
+    pil_workshop_setup:
+      name: "PIL Workshop — One-Click Setup"
+      # Serverless: no job_clusters block; tasks run on serverless compute.
+      tasks:
+        - task_key: setup_all
+          notebook_task:
+            notebook_path: ./setup/00_setup_all.py
+            base_parameters:
+              catalog: ${var.catalog}
+              scale: ${var.scale}
+      # Serverless environment for any %pip installs in child notebooks.
+      queue:
+        enabled: true
+
+  apps:
+    pil_invoice_vision:
+      name: "pil-invoice-vision"
+      description: "PIL Invoice review + Container inspection app."
+      source_code_path: ./app

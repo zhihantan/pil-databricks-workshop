@@ -1,0 +1,23 @@
+# Metric view: Container Port Dwell Time
+# Dwell = hours a container sits in the terminal between discharge and gate-out
+# (container-side, from silver.shipments). Complements the vessel-side
+# turnaround metric in port_dwell_turnaround.yml.
+version: 0.1
+source: ${catalog}.silver.shipments
+filter: dwell_hrs IS NOT NULL AND dwell_hrs >= 0
+dimensions:
+  - name: Discharge Month
+    expr: DATE_TRUNC('MONTH', discharge_ts)
+  - name: Discharge Port
+    expr: pod_port_id
+  - name: Reefer
+    expr: is_reefer
+measures:
+  - name: Shipments
+    expr: COUNT(1)
+  - name: Port Dwell Time (hrs)
+    expr: ROUND(AVG(dwell_hrs), 1)
+  - name: Median Dwell (hrs)
+    expr: ROUND(PERCENTILE(dwell_hrs, 0.5), 1)
+  - name: P90 Dwell (hrs)
+    expr: ROUND(PERCENTILE(dwell_hrs, 0.9), 1)

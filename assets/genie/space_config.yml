@@ -1,0 +1,106 @@
+# Genie space configuration for the PIL workshop.
+# Consumed by setup/06_create_genie_space.py. Tables are referenced with the
+# ${catalog} token which the notebook substitutes. Genie quality depends on the
+# gold/metric-view column comments applied in notebook 03/04.
+
+title: "PIL Shipping Operations — Genie"
+description: >
+  Ask natural-language questions about Pacific International Lines' container
+  liner operations: schedule reliability, vessel utilization, port performance,
+  revenue, sustainability, and working capital. Answers come from the governed
+  gold layer and metric views only.
+
+warehouse: SERVERLESS   # resolved to a serverless SQL warehouse id at runtime
+
+# Curated table list — gold + metric views ONLY (never bronze/silver raw).
+tables:
+  - ${catalog}.gold.mv_daily_operations_kpis
+  - ${catalog}.gold.mv_port_performance
+  - ${catalog}.gold.mv_customer_revenue
+  - ${catalog}.gold.mv_container_utilization
+  - ${catalog}.gold.metric_schedule_reliability
+  - ${catalog}.gold.metric_delivery_transit
+  - ${catalog}.gold.metric_vessel_utilization
+  - ${catalog}.gold.metric_port_dwell_turnaround
+  - ${catalog}.gold.metric_revenue
+  - ${catalog}.gold.metric_sustainability
+  - ${catalog}.gold.metric_working_capital
+
+# Business instructions Genie should always apply.
+instructions: |
+  You are the analytics assistant for PIL (Pacific International Lines), a global
+  container shipping line. Follow these business definitions precisely:
+
+  - A voyage leg is LATE when its actual arrival (ATA) is more than 24 hours after
+    the pro-forma ETA. "Schedule reliability %" = on-time legs / total legs.
+  - "On-time delivery %" uses the same 24-hour tolerance on ATA.
+  - "Vessel utilization %" = loaded TEU / capacity TEU (manifest-based), not a
+    count of individual containers.
+  - "Revenue per TEU" = (freight revenue + demurrage & detention revenue) / TEU.
+  - "DSO" (days sales outstanding) is the average days from invoice issue to paid,
+    over paid invoices only.
+  - "Fuel efficiency" is metric tonnes of fuel per 1,000 TEU-nautical-miles; lower
+    is better. "CO2 per TEU-km" uses a VLSFO factor of ~3.114 t CO2 / t fuel.
+  - TEU = twenty-foot equivalent unit. A 40ft container = 2 TEU.
+  - Fiscal calendar = calendar year; "last quarter" = the most recent completed
+    calendar quarter relative to the latest data date.
+
+  Preferred join paths (informational FKs exist):
+    bookings.customer_id → customers.customer_id
+    bookings.voyage_id  → voyages.voyage_id
+    voyage_legs.voyage_id → voyages.voyage_id
+    voyages.vessel_id   → vessels.vessel_id
+    port_calls.port_id  → ports.port_id
+
+  Default behavior:
+    - Unless the user specifies a period, filter to the LAST 12 MONTHS of data.
+    - Prefer the metric views (metric_*) for ratio KPIs so definitions stay
+      consistent; use the mv_* materialized views for time series and detail.
+    - Never query the bronze or silver raw tables directly.
+    - When asked "why", decompose the KPI (e.g. reliability by trade lane/port).
+
+# Sample questions (easy → hard) shown in the space.
+sample_questions:
+  - "What is our overall schedule reliability in the last 12 months?"
+  - "Show vessel utilization by month."
+  - "Which 5 ports have the worst average turnaround time?"
+  - "What is revenue per TEU by trade lane?"
+  - "How much demurrage and detention revenue did we bill last quarter?"
+  - "Show the trend of average arrival delay over time."
+  - "Which customer segment generates the most freight revenue?"
+  - "Compare fuel efficiency between LNG and VLSFO vessels."
+  - "What is our CO2 per TEU-km by vessel class?"
+  - "What is our current DSO and how many invoices are overdue?"
+  - "Which trade lane had the worst schedule reliability last quarter and what drove it?"
+  - "Are larger vessel classes more fuel efficient per TEU-nm than feeders?"
+  - "Show booking cancellation rate by month."
+  - "Which ports contribute most to total waiting time?"
+  - "Is revenue per TEU rising or falling over the last year?"
+
+# Benchmark / verified answers — expected SQL for evaluation demos.
+benchmarks:
+  - question: "What is our overall schedule reliability in the last 12 months?"
+    expected_sql: |
+      SELECT ROUND(100.0*SUM(CASE WHEN on_time THEN 1 ELSE 0 END)/COUNT(1),1)
+      FROM ${catalog}.silver.voyage_legs
+      WHERE eta >= ADD_MONTHS(CURRENT_DATE(), -12)
+  - question: "Which 5 ports have the worst average turnaround time?"
+    expected_sql: |
+      SELECT port_name, avg_turnaround_hrs
+      FROM ${catalog}.gold.mv_port_performance
+      ORDER BY avg_turnaround_hrs DESC LIMIT 5
+  - question: "What is revenue per TEU by trade lane?"
+    expected_sql: |
+      SELECT trade_lane,
+             ROUND(SUM(freight_revenue_usd+dd_revenue_usd)/NULLIF(SUM(teu),0),0) AS rev_per_teu
+      FROM ${catalog}.gold._rev_base GROUP BY trade_lane ORDER BY rev_per_teu DESC
+  - question: "Compare fuel efficiency between LNG and VLSFO vessels."
+    expected_sql: |
+      SELECT fuel_type,
+             ROUND(SUM(fuel_consumed_mt)/NULLIF(SUM(teu_nm)/1000.0,0),4) AS fuel_eff
+      FROM ${catalog}.gold._sustainability_base GROUP BY fuel_type
+  - question: "What is our current DSO and how many invoices are overdue?"
+    expected_sql: |
+      SELECT ROUND(AVG(DATEDIFF(paid_date, issue_date)),1) AS dso,
+             SUM(CASE WHEN status='Overdue' THEN 1 ELSE 0 END) AS overdue
+      FROM ${catalog}.silver.invoices

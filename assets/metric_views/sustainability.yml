@@ -1,0 +1,23 @@
+# Metric view: Sustainability (fuel efficiency & CO2 intensity, IMO CII flavor)
+# Fuel efficiency = fuel (mt) per 1,000 TEU-nautical-miles.
+# CO2 uses a VLSFO emission factor ~3.114 t CO2 / t fuel (LNG lower).
+version: 0.1
+source: ${catalog}.gold._sustainability_base
+dimensions:
+  - name: Month
+    expr: DATE_TRUNC('MONTH', leg_date)
+  - name: Vessel Class
+    expr: vessel_class
+  - name: Fuel Type
+    expr: fuel_type
+measures:
+  - name: Fuel Consumed (mt)
+    expr: ROUND(SUM(fuel_consumed_mt), 1)
+  - name: TEU-nm (000s)
+    expr: ROUND(SUM(teu_nm) / 1000.0, 1)
+  - name: Fuel Efficiency (mt per 1k TEU-nm)
+    expr: ROUND(SUM(fuel_consumed_mt) / NULLIF(SUM(teu_nm) / 1000.0, 0), 4)
+  - name: CO2 Emitted (mt)
+    expr: ROUND(SUM(co2_mt), 1)
+  - name: CO2 per TEU-km
+    expr: ROUND(SUM(co2_mt) * 1000.0 / NULLIF(SUM(teu_nm) * 1.852, 0), 4)

@@ -1,0 +1,23 @@
+# Metric view: Port Dwell & Vessel Turnaround
+# Dwell = container hours in terminal (from shipments); turnaround = vessel
+# hours alongside (from port_calls). Two sources are kept as separate metric
+# views in practice; here dwell is modeled on port_calls waiting+turnaround as
+# the port-side view, with container dwell available in the operations MV.
+version: 0.1
+source: ${catalog}.silver.port_calls
+dimensions:
+  - name: Arrival Month
+    expr: DATE_TRUNC('MONTH', arrival_ts)
+  - name: Port
+    expr: port_id
+measures:
+  - name: Port Calls
+    expr: COUNT(1)
+  - name: Avg Waiting Time (hrs)
+    expr: ROUND(AVG(waiting_time_hrs), 1)
+  - name: Vessel Turnaround Time (hrs)
+    expr: ROUND(AVG(turnaround_hrs), 1)
+  - name: Total Crane Moves
+    expr: SUM(crane_moves)
+  - name: Avg Crane Moves per Call
+    expr: ROUND(AVG(crane_moves), 0)

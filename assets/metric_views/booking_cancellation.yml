@@ -1,0 +1,16 @@
+# Metric view: Booking Cancellation Rate
+# Cancellation rate % = cancelled bookings / total bookings.
+version: 0.1
+source: ${catalog}.silver.bookings
+dimensions:
+  - name: Booking Month
+    expr: DATE_TRUNC('MONTH', booking_ts)
+  - name: Commodity
+    expr: commodity
+measures:
+  - name: Total Bookings
+    expr: COUNT(1)
+  - name: Cancelled Bookings
+    expr: SUM(CASE WHEN is_cancelled THEN 1 ELSE 0 END)
+  - name: Booking Cancellation Rate %
+    expr: ROUND(100.0 * SUM(CASE WHEN is_cancelled THEN 1 ELSE 0 END) / NULLIF(COUNT(1), 0), 1)

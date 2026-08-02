@@ -1,0 +1,43 @@
+[project]
+name = "pil-workshop"
+version = "1.0.0"
+description = "PIL Data + AI Workshop — shared library and setup notebooks."
+requires-python = ">=3.10"
+readme = "README.md"
+license = { text = "MIT" }
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# ---------------------------------------------------------------------------
+# Ruff — the repo targets Ruff-clean Python.
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["app/frontend", "**/*.ipynb"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W"]
+ignore = [
+  "E501",  # line length handled by formatter; some SQL strings run long
+  "B008",  # FastAPI Depends() in defaults is idiomatic
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Databricks notebooks rely on ambient globals injected by the runtime and use
+# a linear top-to-bottom style; relax the rules that don't apply there. F811 is
+# allowed because `dbutils.library.restartPython()` wipes imports, so notebooks
+# legitimately re-import os/sys afterward.
+"setup/*.py" = ["F821", "E402", "F811"]
+
+[tool.ruff.lint.flake8-builtins]
+# Recognized notebook globals so they are not flagged as shadowing/undefined.
+builtins-allowed-modules = []

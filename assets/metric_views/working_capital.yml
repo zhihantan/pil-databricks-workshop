@@ -1,0 +1,23 @@
+# Metric view: Working Capital / Invoicing (DSO, booking cancellation)
+# DSO (days sales outstanding) = avg days from issue to paid on paid invoices.
+version: 0.1
+source: ${catalog}.silver.invoices
+dimensions:
+  - name: Issue Month
+    expr: DATE_TRUNC('MONTH', issue_date)
+  - name: Currency
+    expr: currency
+  - name: Status
+    expr: status
+measures:
+  - name: Invoice Count
+    expr: COUNT(1)
+  - name: Billed (USD)
+    expr: ROUND(SUM(total_usd), 0)
+  - name: DSO (days)
+    expr: ROUND(AVG(CASE WHEN paid_date IS NOT NULL
+             THEN DATEDIFF(paid_date, issue_date) END), 1)
+  - name: Disputed %
+    expr: ROUND(100.0 * SUM(CASE WHEN is_disputed THEN 1 ELSE 0 END) / NULLIF(COUNT(1),0), 1)
+  - name: Overdue Count
+    expr: SUM(CASE WHEN status = 'Overdue' THEN 1 ELSE 0 END)

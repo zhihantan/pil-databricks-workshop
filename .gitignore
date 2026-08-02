@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+.python-version
+
+# Node / frontend
+app/frontend/node_modules/
+app/frontend/dist/
+app/backend/static/
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Databricks
+.databricks/
+.databricks-login.json
+
+# Local generated artifacts (data is generated in-workspace, never committed)
+/tmp_local_data/
+*.local.env
+.env
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+MASTER_PROMPT_PIL_WORKSHOP.md

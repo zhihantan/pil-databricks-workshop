@@ -1,0 +1,27 @@
+artifact_path: /Users/zhihan.tan/Documents/AI_Agents/pil_workshop/setup/mlruns/0/models/m-ff4ba29e23a74f718fb85ed30478b983/artifacts
+flavors:
+  lightgbm:
+    code: null
+    data: model.skops
+    lgb_version: 4.7.0
+    model_class: lightgbm.sklearn.LGBMRegressor
+    serialization_format: skops
+    skops_trusted_types:
+    - lightgbm.sklearn.LGBMClassifier
+    - lightgbm.sklearn.LGBMRegressor
+    - collections.OrderedDict
+    - lightgbm.basic.Booster
+  python_function:
+    data: model.skops
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.lightgbm
+    python_version: 3.10.20
+mlflow_version: 3.14.0
+model_id: m-ff4ba29e23a74f718fb85ed30478b983
+model_size_bytes: 885314
+model_uuid: m-ff4ba29e23a74f718fb85ed30478b983
+prompts: null
+run_id: 0dba433a12c24929b78149266386fbf3
+utc_time_created: '2026-08-01 17:46:53.621607'

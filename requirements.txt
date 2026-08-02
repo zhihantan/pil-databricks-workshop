@@ -1,0 +1,42 @@
+# ---------------------------------------------------------------------------
+# PIL Databricks Workshop — Python dependencies
+#
+# On Databricks Serverless notebooks most of these are preinstalled. The
+# setup notebooks call `%pip install -r ../requirements.txt` where a package
+# is not guaranteed to be present (reportlab, Pillow, ortools, lightgbm).
+#
+# Pin ranges are conservative so the repo keeps working as the runtime moves.
+# ---------------------------------------------------------------------------
+
+# --- Databricks platform SDKs (programmatic asset creation) ---
+databricks-sdk>=0.40.0
+databricks-sql-connector>=3.6.0
+
+# --- Data generation & processing (deterministic synthetic data) ---
+numpy>=1.26,<3
+pandas>=2.1
+python-dateutil>=2.9
+PyYAML>=6.0          # Genie space_config.yml + metric-view YAML loading
+
+# --- Unstructured data generation (Phase 3) ---
+reportlab>=4.1          # synthetic freight-invoice PDFs
+Pillow>=10.3            # synthetic labeled container images
+
+# --- Classic ML (Phase 5) ---
+lightgbm>=4.3           # global demand-forecasting model
+scikit-learn>=1.4       # metrics, preprocessing
+statsmodels>=0.14       # ETS / SARIMAX baselines
+ortools>=9.10           # route optimization (min-cost flow, VRPTW / CP-SAT)
+
+# --- LLM access is via Databricks Foundation Model APIs through the OpenAI-
+#     compatible client shipped in databricks-sdk. `openai` is only used as
+#     that compatible client pointed at the workspace serving endpoint — it
+#     never talks to api.openai.com. See src/pil_workshop/llm.py. ---
+openai>=1.40
+
+# --- MLflow (tracking + UC model registry + serving) ---
+mlflow>=2.16
+
+# --- Dev / quality (not needed at workshop runtime) ---
+ruff>=0.6
+pytest>=8.2

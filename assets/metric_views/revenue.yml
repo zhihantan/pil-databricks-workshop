@@ -1,0 +1,25 @@
+# Metric view: Revenue (freight, D&D, revenue per TEU)
+# Built on a revenue base view (gold._rev_base) that joins bookings, shipments
+# and invoice line items so freight vs demurrage/detention are separable.
+version: 0.1
+source: ${catalog}.gold._rev_base
+dimensions:
+  - name: Month
+    expr: DATE_TRUNC('MONTH', revenue_date)
+  - name: Trade Lane
+    expr: trade_lane
+  - name: Customer Segment
+    expr: customer_type
+  - name: Customer Industry
+    expr: industry
+measures:
+  - name: Freight Revenue (USD)
+    expr: ROUND(SUM(freight_revenue_usd), 0)
+  - name: Demurrage & Detention Revenue (USD)
+    expr: ROUND(SUM(dd_revenue_usd), 0)
+  - name: Total Revenue (USD)
+    expr: ROUND(SUM(freight_revenue_usd + dd_revenue_usd), 0)
+  - name: TEU Shipped
+    expr: SUM(teu)
+  - name: Revenue per TEU (USD)
+    expr: ROUND(SUM(freight_revenue_usd + dd_revenue_usd) / NULLIF(SUM(teu), 0), 0)

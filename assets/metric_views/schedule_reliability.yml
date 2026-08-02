@@ -1,0 +1,23 @@
+# Metric view: Schedule Reliability
+# Created via: CREATE VIEW ... WITH METRICS LANGUAGE YAML AS $$ <this> $$
+# A leg is "reliable" when it arrived within 24h of its pro-forma ETA
+# (on_time flag). Reliability % = reliable legs / total legs.
+version: 0.1
+source: ${catalog}.silver.voyage_legs
+filter: eta IS NOT NULL
+dimensions:
+  - name: Arrival Month
+    expr: DATE_TRUNC('MONTH', eta)
+  - name: Destination Port
+    expr: dest_port_id
+  - name: Voyage
+    expr: voyage_id
+measures:
+  - name: Total Legs
+    expr: COUNT(1)
+  - name: On-Time Legs
+    expr: SUM(CASE WHEN on_time THEN 1 ELSE 0 END)
+  - name: Schedule Reliability %
+    expr: ROUND(100.0 * SUM(CASE WHEN on_time THEN 1 ELSE 0 END) / NULLIF(COUNT(1), 0), 1)
+  - name: Avg Arrival Delay (hrs)
+    expr: ROUND(AVG(arrival_delay_hrs), 1)
