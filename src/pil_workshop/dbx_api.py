@@ -151,13 +151,82 @@ def create_or_update_lakeview_dashboard(
 # Genie spaces
 # ===========================================================================
 # Docs: https://docs.databricks.com/api/workspace/genie/createspace
-# The SDK's genie.create_space takes a *serialized_space* string — a versioned
-# "export proto" (version 1/2). The minimal valid payload that binds a space to
-# tables is:
-#   {"version": 1, "data_sources": {"tables": [{"identifier": "<3-level>"}, ...]}}
-# with the tables SORTED by identifier. Instructions/sample-questions are not
-# expressible in this proto version, so they remain documented for the UI and
-# live in assets/genie/space_config.yml. Discovered empirically on serverless.
+# genie.create_space takes a *serialized_space* string — a versioned "export
+# proto". The v2 schema (discovered from an existing space via
+# GET /api/2.0/genie/spaces/<id>?include_serialized_space=true) supports the
+# full curation surface:
+#   {"version": 2,
+#    "data_sources": {"tables": [{"identifier": "<3-level>"}, ...]},   # SORTED
+#    "instructions": {
+#       "text_instructions":     [{"id": <hex>, "content": ["line\n", ...]}],
+#       "example_question_sqls": [{"id": <hex>, "question": ["..."], "sql": ["..."],
+#                                  "usage_guidance": ["..."]}]},
+#    "benchmarks": {"questions": [{"id": <hex>, "question": ["..."],
+#                                  "answer": [{"format": "SQL", "content": ["..."]}]}]}}
+# So instructions, trusted example-SQL, and benchmarks all ship via the API.
+def build_serialized_space(
+    table_identifiers: list[str],
+    text_instructions: str | None = None,
+    example_sqls: list[dict[str, Any]] | None = None,
+    benchmarks: list[dict[str, Any]] | None = None,
+) -> str:
+    """Build a v2 ``serialized_space`` JSON string from workshop content.
+
+    ``example_sqls`` items: {question, sql, usage_guidance?}.
+    ``benchmarks`` items: {question, sql}.
+    Tables are sorted (the proto rejects unsorted). IDs are random 32-hex.
+    """
+    import json
+    import uuid
+
+    def _hid() -> str:
+        return uuid.uuid4().hex
+
+    def _lines(text: str) -> list[str]:
+        # Preserve line structure the way the proto stores it.
+        return [ln + "\n" for ln in text.rstrip("\n").split("\n")]
+
+    space: dict[str, Any] = {
+        "version": 2,
+        "data_sources": {
+            "tables": [{"identifier": t} for t in sorted(set(table_identifiers))]
+        },
+    }
+    # The export proto requires id-bearing lists to be SORTED by id, so we sort
+    # each list after assigning random hex ids.
+    instructions: dict[str, Any] = {}
+    if text_instructions and text_instructions.strip():
+        instructions["text_instructions"] = sorted(
+            [{"id": _hid(), "content": _lines(text_instructions)}],
+            key=lambda x: x["id"],
+        )
+    if example_sqls:
+        items = []
+        for ex in example_sqls:
+            item = {
+                "id": _hid(),
+                "question": [ex["question"]],
+                "sql": [ex["sql"].strip()],
+            }
+            if ex.get("usage_guidance"):
+                item["usage_guidance"] = [ex["usage_guidance"]]
+            items.append(item)
+        instructions["example_question_sqls"] = sorted(items, key=lambda x: x["id"])
+    if instructions:
+        space["instructions"] = instructions
+    if benchmarks:
+        questions = [
+            {
+                "id": _hid(),
+                "question": [b["question"]],
+                "answer": [{"format": "SQL", "content": [b["sql"].strip()]}],
+            }
+            for b in benchmarks
+        ]
+        space["benchmarks"] = {"questions": sorted(questions, key=lambda x: x["id"])}
+    return json.dumps(space)
+
+
 def create_genie_space(
     title: str,
     warehouse_id: str,
@@ -167,26 +236,29 @@ def create_genie_space(
     client: Any | None = None,
     description: str | None = None,
     parent_path: str | None = None,
+    example_sqls: list[dict[str, Any]] | None = None,
+    benchmarks: list[dict[str, Any]] | None = None,
 ) -> str | None:
-    """Create a Genie space bound to ``table_identifiers``; return space id or None.
+    """Create a Genie space with instructions, example SQL, and benchmarks.
 
-    Returns ``None`` (rather than raising) when the API is unavailable, so the
-    setup notebook can fall back to documented UI steps. ``instructions`` and
-    ``sample_questions`` are accepted for signature compatibility but are added
-    via the UI (not supported by the serialized-space proto here).
+    Returns the space id, or ``None`` (rather than raising) when the API is
+    unavailable so the caller can fall back to documented UI steps. The rich
+    content is embedded in a v2 ``serialized_space`` via :func:`build_serialized_space`.
     """
-    import json
-
     wc = _ws(client)
     genie = getattr(wc, "genie", None)
     create_fn = getattr(genie, "create_space", None) if genie else None
     if create_fn is None:
         LOG.info("SDK Genie space creation not available; caller should use UI.")
+        create_genie_space.last_error = (  # type: ignore[attr-defined]
+            "genie.create_space unavailable (needs databricks-sdk>=0.86)"
+        )
         return None
 
-    # Tables MUST be sorted by identifier or the export proto is rejected.
-    tables = [{"identifier": t} for t in sorted(set(table_identifiers))]
-    serialized = json.dumps({"version": 1, "data_sources": {"tables": tables}})
+    serialized = build_serialized_space(
+        table_identifiers, text_instructions=instructions,
+        example_sqls=example_sqls, benchmarks=benchmarks,
+    )
 
     if parent_path is None:
         try:
@@ -205,6 +277,7 @@ def create_genie_space(
         if parent_path:
             kwargs["parent_path"] = parent_path
         space = create_fn(**kwargs)  # pragma: no cover - platform-only
+        create_genie_space.last_error = None  # type: ignore[attr-defined]
         return getattr(space, "space_id", None) or getattr(space, "id", None)
     except Exception as exc:  # noqa: BLE001
         LOG.warning("Genie space API call failed (%s); fall back to UI.", exc)

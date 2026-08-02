@@ -106,3 +106,46 @@ def test_croston_tsb_positive_for_intermittent():
 
 def test_wape_handles_all_zero_actual():
     assert wape(np.zeros(3), np.zeros(3)) == 0.0
+
+
+# --- Genie serialized_space builder (dbx_api) ---------------------------------
+def test_build_serialized_space_v2_shape_and_sorting():
+    import json
+
+    from pil_workshop.dbx_api import build_serialized_space
+
+    s = json.loads(
+        build_serialized_space(
+            ["c.gold.b_table", "c.gold.a_table"],  # intentionally unsorted
+            text_instructions="Line one.\nLine two.",
+            example_sqls=[
+                {"question": "q1", "sql": "SELECT 1", "usage_guidance": "g1"},
+                {"question": "q2", "sql": "SELECT 2"},
+            ],
+            benchmarks=[{"question": "bq", "sql": "SELECT 3"}],
+        )
+    )
+    assert s["version"] == 2
+    # tables sorted by identifier
+    idents = [t["identifier"] for t in s["data_sources"]["tables"]]
+    assert idents == sorted(idents)
+    ti = s["instructions"]["text_instructions"]
+    assert len(ti) == 1 and ti[0]["content"] == ["Line one.\n", "Line two.\n"]
+    ex = s["instructions"]["example_question_sqls"]
+    assert len(ex) == 2
+    # id-bearing lists must be sorted by id (proto requirement)
+    assert [e["id"] for e in ex] == sorted(e["id"] for e in ex)
+    assert all(len(e["id"]) == 32 for e in ex)  # uuid hex
+    bq = s["benchmarks"]["questions"]
+    assert len(bq) == 1 and bq[0]["answer"][0]["format"] == "SQL"
+
+
+def test_build_serialized_space_minimal_tables_only():
+    import json
+
+    from pil_workshop.dbx_api import build_serialized_space
+
+    s = json.loads(build_serialized_space(["c.g.t"]))
+    assert s["version"] == 2
+    assert s["data_sources"]["tables"] == [{"identifier": "c.g.t"}]
+    assert "instructions" not in s and "benchmarks" not in s

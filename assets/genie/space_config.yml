@@ -1,106 +1,171 @@
 # Genie space configuration for the PIL workshop.
-# Consumed by setup/06_create_genie_space.py. Tables are referenced with the
-# ${catalog} token which the notebook substitutes. Genie quality depends on the
-# gold/metric-view column comments applied in notebook 03/04.
+#
+# Consumed by setup/06_create_genie_space.py, which builds a v2 serialized_space
+# and creates the space via the Genie API — so the space ships WITH instructions,
+# trusted example-SQL, and benchmarks (not UI-only). ${catalog} is substituted.
+#
+# Authored to Databricks Genie best practices (docs.databricks.com/genie-agents/
+# best-practices + FE internal guidance):
+#   * Metric-view / semantic-layer first; keep the table set focused.
+#   * Prefer example SQL over prose; keep text instructions tight (<~2000 chars).
+#   * Define business terms; give a clarification pattern; put summary rules last.
+#   * Trusted assets (example_sqls) teach Genie verified query patterns.
+#   * Benchmarks enable systematic accuracy scoring.
 
 title: "PIL Shipping Operations — Genie"
 description: >
-  Ask natural-language questions about Pacific International Lines' container
-  liner operations: schedule reliability, vessel utilization, port performance,
-  revenue, sustainability, and working capital. Answers come from the governed
-  gold layer and metric views only.
+  Natural-language analytics over Pacific International Lines' container-liner
+  operations — schedule reliability, vessel utilization, port performance,
+  revenue, sustainability, and working capital — on the governed gold layer.
 
 warehouse: SERVERLESS   # resolved to a serverless SQL warehouse id at runtime
 
-# Curated table list — gold + metric views ONLY (never bronze/silver raw).
+# Curated, focused table list — gold materialized + metric views only (never
+# bronze/silver). Genie Agents favour a small, well-modeled set.
 tables:
   - ${catalog}.gold.mv_daily_operations_kpis
   - ${catalog}.gold.mv_port_performance
   - ${catalog}.gold.mv_customer_revenue
-  - ${catalog}.gold.mv_container_utilization
   - ${catalog}.gold.metric_schedule_reliability
-  - ${catalog}.gold.metric_delivery_transit
   - ${catalog}.gold.metric_vessel_utilization
-  - ${catalog}.gold.metric_port_dwell_turnaround
   - ${catalog}.gold.metric_revenue
   - ${catalog}.gold.metric_sustainability
   - ${catalog}.gold.metric_working_capital
+  - ${catalog}.gold.metric_port_dwell_turnaround
 
-# Business instructions Genie should always apply.
-instructions: |
+# ---------------------------------------------------------------------------
+# General text instructions (concise; semantic-layer-first). Kept well under
+# the ~2000-char guideline. Business definitions + a clarification rule + a
+# trailing summary-formatting section (only text instructions affect summaries).
+# ---------------------------------------------------------------------------
+text_instructions: |
   You are the analytics assistant for PIL (Pacific International Lines), a global
-  container shipping line. Follow these business definitions precisely:
+  container shipping line. Answer over the governed `${catalog}.gold` layer only
+  (never bronze/silver). Be concise; state the grain and any filters you applied.
+  Format money as USD, TEU as whole numbers, and rates/percentages to 1 decimal.
 
-  - A voyage leg is LATE when its actual arrival (ATA) is more than 24 hours after
-    the pro-forma ETA. "Schedule reliability %" = on-time legs / total legs.
-  - "On-time delivery %" uses the same 24-hour tolerance on ATA.
-  - "Vessel utilization %" = loaded TEU / capacity TEU (manifest-based), not a
-    count of individual containers.
-  - "Revenue per TEU" = (freight revenue + demurrage & detention revenue) / TEU.
-  - "DSO" (days sales outstanding) is the average days from invoice issue to paid,
-    over paid invoices only.
-  - "Fuel efficiency" is metric tonnes of fuel per 1,000 TEU-nautical-miles; lower
-    is better. "CO2 per TEU-km" uses a VLSFO factor of ~3.114 t CO2 / t fuel.
-  - TEU = twenty-foot equivalent unit. A 40ft container = 2 TEU.
-  - Fiscal calendar = calendar year; "last quarter" = the most recent completed
-    calendar quarter relative to the latest data date.
+  SEMANTIC LAYER — prefer the metric views for aggregated KPIs and query their
+  measures with MEASURE(); use the mv_* views for time series and detail:
+  - metric_schedule_reliability — MEASURE(`Schedule Reliability %`), `Total Legs`,
+    `On-Time Legs`, `Avg Arrival Delay (hrs)`; dims: `Arrival Month`, `Destination Port`.
+  - metric_vessel_utilization — MEASURE(`Vessel Utilization %`), `Loaded TEU`, `Capacity TEU`.
+  - metric_revenue — MEASURE(`Revenue per TEU (USD)`), `Freight Revenue (USD)`,
+    `Demurrage & Detention Revenue (USD)`, `Total Revenue (USD)`, `TEU Shipped`;
+    dims: `Month`, `Trade Lane`, `Customer Segment`, `Customer Industry`.
+  - metric_sustainability — MEASURE(`Fuel Efficiency (mt per 1k TEU-nm)`),
+    `CO2 per TEU-km`; dims: `Vessel Class`, `Fuel Type`, `Month`.
+  - metric_working_capital — MEASURE(`DSO (days)`), `Billed (USD)`, `Overdue Count`.
+  - metric_port_dwell_turnaround — MEASURE(`Vessel Turnaround Time (hrs)`),
+    `Avg Waiting Time (hrs)`; dim: `Port`.
+  Example: SELECT `Trade Lane`, MEASURE(`Revenue per TEU (USD)`)
+  FROM ${catalog}.gold.metric_revenue GROUP BY `Trade Lane`.
 
-  Preferred join paths (informational FKs exist):
-    bookings.customer_id → customers.customer_id
-    bookings.voyage_id  → voyages.voyage_id
-    voyage_legs.voyage_id → voyages.voyage_id
-    voyages.vessel_id   → vessels.vessel_id
-    port_calls.port_id  → ports.port_id
+  BUSINESS DEFINITIONS:
+  - A voyage leg is LATE when actual arrival is >24h after pro-forma ETA;
+    "schedule reliability %" = on-time legs / total legs.
+  - "Vessel utilization %" = loaded TEU / capacity TEU (manifest-based).
+  - "Revenue per TEU" = (freight + demurrage & detention) / TEU.
+  - "D&D" = demurrage & detention. "DSO" = days sales outstanding (issue→paid).
+  - "Fuel efficiency" = mt fuel per 1,000 TEU-nautical-miles (lower is better).
+  - TEU = twenty-foot equivalent unit; a 40ft container = 2 TEU.
+  - "Trade lane" = origin region → destination region.
+  Default to the LAST 12 MONTHS unless the user specifies a period. "Last quarter"
+  = the most recent completed calendar quarter.
 
-  Default behavior:
-    - Unless the user specifies a period, filter to the LAST 12 MONTHS of data.
-    - Prefer the metric views (metric_*) for ratio KPIs so definitions stay
-      consistent; use the mv_* materialized views for time series and detail.
-    - Never query the bronze or silver raw tables directly.
-    - When asked "why", decompose the KPI (e.g. reliability by trade lane/port).
+  CLARIFICATION: When a user asks about "performance" or "revenue" without a
+  period, trade lane, or metric, ask one clarifying question before answering,
+  e.g. "Which period and trade lane, and are you interested in reliability,
+  utilization, or revenue?"
 
-# Sample questions (easy → hard) shown in the space.
+  Instructions you must follow when providing summaries:
+  - State the time period and grain covered by the result.
+  - Name the metric view or table used.
+  - Lead with the headline number, then 1–2 drivers; use bullets for multi-part answers.
+
+# ---------------------------------------------------------------------------
+# Trusted example SQL (teaches Genie verified query patterns). Each becomes an
+# example_question_sql in the space. Reference real gold columns/measures.
+# ---------------------------------------------------------------------------
+example_sqls:
+  - question: "What is our overall schedule reliability over the last 12 months?"
+    sql: |
+      SELECT MEASURE(`Schedule Reliability %`) AS schedule_reliability_pct
+      FROM ${catalog}.gold.metric_schedule_reliability
+      WHERE `Arrival Month` >= ADD_MONTHS(DATE_TRUNC('MONTH', CURRENT_DATE()), -12)
+    usage_guidance: "Use metric_schedule_reliability with MEASURE() for reliability; filter by Arrival Month."
+  - question: "Which 5 ports have the worst average turnaround time?"
+    sql: |
+      SELECT port_name, region, avg_turnaround_hrs
+      FROM ${catalog}.gold.mv_port_performance
+      ORDER BY avg_turnaround_hrs DESC
+      LIMIT 5
+    usage_guidance: "Port rankings come from mv_port_performance (already aggregated per port)."
+  - question: "What is revenue per TEU by trade lane?"
+    sql: |
+      SELECT `Trade Lane`, MEASURE(`Revenue per TEU (USD)`) AS revenue_per_teu
+      FROM ${catalog}.gold.metric_revenue
+      GROUP BY `Trade Lane`
+      ORDER BY revenue_per_teu DESC
+    usage_guidance: "Revenue-per-TEU and D&D revenue live in metric_revenue; slice by Trade Lane / Customer Segment."
+  - question: "Compare fuel efficiency between LNG and VLSFO vessels."
+    sql: |
+      SELECT `Fuel Type`, MEASURE(`Fuel Efficiency (mt per 1k TEU-nm)`) AS fuel_eff
+      FROM ${catalog}.gold.metric_sustainability
+      GROUP BY `Fuel Type`
+    usage_guidance: "Sustainability KPIs (fuel efficiency, CO2 per TEU-km) come from metric_sustainability."
+  - question: "What is our current DSO and how many invoices are overdue?"
+    sql: |
+      SELECT MEASURE(`DSO (days)`) AS dso_days, MEASURE(`Overdue Count`) AS overdue
+      FROM ${catalog}.gold.metric_working_capital
+    usage_guidance: "Working-capital KPIs (DSO, overdue, billed) come from metric_working_capital."
+
+# ---------------------------------------------------------------------------
+# ~15 sample questions (easy → hard), shown to users and used to seed benchmarks.
+# ---------------------------------------------------------------------------
 sample_questions:
-  - "What is our overall schedule reliability in the last 12 months?"
+  - "What is our overall schedule reliability over the last 12 months?"
   - "Show vessel utilization by month."
   - "Which 5 ports have the worst average turnaround time?"
   - "What is revenue per TEU by trade lane?"
   - "How much demurrage and detention revenue did we bill last quarter?"
-  - "Show the trend of average arrival delay over time."
+  - "Show the monthly trend of average arrival delay."
   - "Which customer segment generates the most freight revenue?"
   - "Compare fuel efficiency between LNG and VLSFO vessels."
   - "What is our CO2 per TEU-km by vessel class?"
   - "What is our current DSO and how many invoices are overdue?"
-  - "Which trade lane had the worst schedule reliability last quarter and what drove it?"
+  - "Which trade lane has the worst schedule reliability, and what drove it?"
   - "Are larger vessel classes more fuel efficient per TEU-nm than feeders?"
-  - "Show booking cancellation rate by month."
-  - "Which ports contribute most to total waiting time?"
+  - "Which ports contribute most to total vessel waiting time?"
   - "Is revenue per TEU rising or falling over the last year?"
+  - "Show total revenue by customer industry."
 
-# Benchmark / verified answers — expected SQL for evaluation demos.
+# ---------------------------------------------------------------------------
+# Benchmarks (verified Q&A with expected SQL) for systematic accuracy scoring.
+# ---------------------------------------------------------------------------
 benchmarks:
-  - question: "What is our overall schedule reliability in the last 12 months?"
-    expected_sql: |
-      SELECT ROUND(100.0*SUM(CASE WHEN on_time THEN 1 ELSE 0 END)/COUNT(1),1)
-      FROM ${catalog}.silver.voyage_legs
-      WHERE eta >= ADD_MONTHS(CURRENT_DATE(), -12)
+  - question: "What is our overall schedule reliability over the last 12 months?"
+    sql: |
+      SELECT MEASURE(`Schedule Reliability %`)
+      FROM ${catalog}.gold.metric_schedule_reliability
+      WHERE `Arrival Month` >= ADD_MONTHS(DATE_TRUNC('MONTH', CURRENT_DATE()), -12)
   - question: "Which 5 ports have the worst average turnaround time?"
-    expected_sql: |
+    sql: |
       SELECT port_name, avg_turnaround_hrs
       FROM ${catalog}.gold.mv_port_performance
       ORDER BY avg_turnaround_hrs DESC LIMIT 5
   - question: "What is revenue per TEU by trade lane?"
-    expected_sql: |
-      SELECT trade_lane,
-             ROUND(SUM(freight_revenue_usd+dd_revenue_usd)/NULLIF(SUM(teu),0),0) AS rev_per_teu
-      FROM ${catalog}.gold._rev_base GROUP BY trade_lane ORDER BY rev_per_teu DESC
+    sql: |
+      SELECT `Trade Lane`, MEASURE(`Revenue per TEU (USD)`)
+      FROM ${catalog}.gold.metric_revenue GROUP BY `Trade Lane`
   - question: "Compare fuel efficiency between LNG and VLSFO vessels."
-    expected_sql: |
-      SELECT fuel_type,
-             ROUND(SUM(fuel_consumed_mt)/NULLIF(SUM(teu_nm)/1000.0,0),4) AS fuel_eff
-      FROM ${catalog}.gold._sustainability_base GROUP BY fuel_type
+    sql: |
+      SELECT `Fuel Type`, MEASURE(`Fuel Efficiency (mt per 1k TEU-nm)`)
+      FROM ${catalog}.gold.metric_sustainability GROUP BY `Fuel Type`
   - question: "What is our current DSO and how many invoices are overdue?"
-    expected_sql: |
-      SELECT ROUND(AVG(DATEDIFF(paid_date, issue_date)),1) AS dso,
-             SUM(CASE WHEN status='Overdue' THEN 1 ELSE 0 END) AS overdue
-      FROM ${catalog}.silver.invoices
+    sql: |
+      SELECT MEASURE(`DSO (days)`), MEASURE(`Overdue Count`)
+      FROM ${catalog}.gold.metric_working_capital
+  - question: "Show total revenue by customer industry."
+    sql: |
+      SELECT `Customer Industry`, MEASURE(`Total Revenue (USD)`)
+      FROM ${catalog}.gold.metric_revenue GROUP BY `Customer Industry`

@@ -65,8 +65,10 @@ print(f"Title: {space['title']}")
 print(f"Curated tables ({len(tables)}):")
 for t in tables:
     print(f"  • {t}")
-print(f"Sample questions: {len(space['sample_questions'])}")
-print(f"Benchmarks: {len(space['benchmarks'])}")
+print(f"Text instructions: {len(space.get('text_instructions', ''))} chars")
+print(f"Example SQL (trusted assets): {len(space.get('example_sqls', []))}")
+print(f"Sample questions: {len(space.get('sample_questions', []))}")
+print(f"Benchmarks: {len(space.get('benchmarks', []))}")
 
 # COMMAND ----------
 
@@ -108,10 +110,12 @@ else:
         title=space["title"],
         warehouse_id=warehouse_id,
         table_identifiers=tables,
-        instructions=space["instructions"],
-        sample_questions=space["sample_questions"],
+        instructions=space.get("text_instructions", ""),
+        sample_questions=space.get("sample_questions", []),
         client=wc,
         description=space.get("description"),
+        example_sqls=space.get("example_sqls"),
+        benchmarks=space.get("benchmarks"),
     )
     _genie_err = getattr(dbx_api.create_genie_space, "last_error", None)
     if _genie_err:
