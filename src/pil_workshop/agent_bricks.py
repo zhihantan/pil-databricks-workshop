@@ -182,7 +182,12 @@ SELECT
     fl.file_name,
     nc.extraction_json,
     fl.f.invoice_no                                       AS invoice_no,
-    NULLIF(fl.f.po_number, '')                            AS po_number,
+    -- normalize placeholder POs ('', '—', '-', 'n/a', 'none') to NULL so a
+    -- genuinely missing PO is detectable downstream.
+    CASE
+        WHEN TRIM(LOWER(COALESCE(fl.f.po_number, ''))) IN ('', '—', '-', 'n/a', 'none', 'null')
+        THEN NULL ELSE fl.f.po_number
+    END                                                   AS po_number,
     fl.f.customer                                         AS customer,
     fl.f.currency                                         AS currency,
     -- prefer the nested numeric total; fall back to ai_extract's flat total
@@ -200,40 +205,48 @@ JOIN nested_clean nc ON fl.file_name = nc.file_name
 
 
 def build_invoice_reconciliation_sql(catalog: str) -> str:
-    """Return SQL that reconciles extractions vs ground truth → exceptions.
+    """Return SQL that flags invoice exceptions from the EXTRACTED data itself.
 
-    Flags total mismatches, missing POs, and duplicate invoice numbers into
-    ``gold.invoice_exceptions``.
+    Detects the three real-world problems directly from what was extracted — no
+    ground-truth table required (a production deployment has none):
+      * total_mismatch — total != subtotal + tax (internal inconsistency),
+      * missing_po     — po_number is null after placeholder normalization,
+      * duplicate_no   — the same invoice_no appears on more than one document.
+    Writes one row per problem invoice → ``gold.invoice_exceptions``. Where a
+    ground-truth table exists (this workshop), its label is joined for eval.
     """
     return f"""
 CREATE OR REPLACE TABLE `{catalog}`.`gold`.`invoice_exceptions` AS
-WITH x AS (
-    SELECT e.*, g.total AS gt_total, g.po_number AS gt_po, g.gt_anomaly
-    FROM `{catalog}`.`silver`.`invoice_extractions` e
-    LEFT JOIN `{catalog}`.`silver`.`invoice_pdf_ground_truth` g
-      ON e.file_name = g.file_name
+WITH e AS (
+    SELECT * FROM `{catalog}`.`silver`.`invoice_extractions`
 ),
-dups AS (
-    SELECT invoice_no FROM `{catalog}`.`silver`.`invoice_extractions`
-    WHERE invoice_no IS NOT NULL
-    GROUP BY invoice_no HAVING COUNT(*) > 1
+dup_counts AS (
+    SELECT invoice_no, COUNT(*) AS n
+    FROM e WHERE invoice_no IS NOT NULL GROUP BY invoice_no
+),
+flagged AS (
+    SELECT
+        e.file_name, e.invoice_no, e.customer, e.subtotal, e.tax, e.total,
+        CASE
+            WHEN e.total IS NOT NULL
+             AND ABS(e.total - (COALESCE(e.subtotal,0) + COALESCE(e.tax,0))) > 1.0
+                THEN 'total_mismatch'
+            WHEN e.po_number IS NULL THEN 'missing_po'
+            WHEN dc.n > 1 THEN 'duplicate_no'
+            ELSE NULL
+        END AS exception_type
+    FROM e
+    LEFT JOIN dup_counts dc ON e.invoice_no = dc.invoice_no
 )
 SELECT
-    x.file_name, x.invoice_no, x.customer, x.total, x.gt_total,
-    CASE
-        WHEN x.po_number IS NULL THEN 'missing_po'
-        WHEN x.gt_total IS NOT NULL AND ABS(COALESCE(x.total,0) - x.gt_total) > 1.0
-            THEN 'total_mismatch'
-        WHEN d.invoice_no IS NOT NULL THEN 'duplicate_no'
-        ELSE NULL
-    END AS exception_type,
-    x.gt_anomaly AS ground_truth_anomaly
-FROM x
-LEFT JOIN dups d ON x.invoice_no = d.invoice_no
-WHERE
-    x.po_number IS NULL
-    OR (x.gt_total IS NOT NULL AND ABS(COALESCE(x.total,0) - x.gt_total) > 1.0)
-    OR d.invoice_no IS NOT NULL
+    f.file_name, f.invoice_no, f.customer, f.subtotal, f.tax, f.total,
+    f.exception_type,
+    g.total       AS gt_total,        -- for the workshop eval only
+    g.gt_anomaly  AS ground_truth_anomaly
+FROM flagged f
+LEFT JOIN `{catalog}`.`silver`.`invoice_pdf_ground_truth` g
+  ON f.file_name = g.file_name
+WHERE f.exception_type IS NOT NULL
 """.strip()
 
 
