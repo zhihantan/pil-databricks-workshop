@@ -212,10 +212,19 @@ try:
             # Two-step: log to the run, then explicitly register + capture the
             # version. The one-step `registered_model_name=` can create the
             # model container without an attached version on UC in a Job.
-            info = mlflow.lightgbm.log_model(
-                model, name="model", input_example=train_df[feature_cols].head(2)
-            )
-            mv = mlflow.register_model(info.model_uri, model_name)
+            # log_model's model-path kwarg differs by MLflow version
+            # (newer: name=, older: artifact_path=), so try both.
+            example = train_df[feature_cols].head(2)
+            try:
+                info = mlflow.lightgbm.log_model(model, name="model", input_example=example)
+            except TypeError:
+                info = mlflow.lightgbm.log_model(
+                    model, artifact_path="model", input_example=example
+                )
+            # Resolve the model URI across versions (info.model_uri on newer,
+            # else runs:/<run_id>/model).
+            model_uri = getattr(info, "model_uri", None) or f"runs:/{run.info.run_id}/model"
+            mv = mlflow.register_model(model_uri, model_name)
             champion_version = mv.version
             ok(f"Registered LightGBM champion to UC: {model_name} v{mv.version}")
         else:

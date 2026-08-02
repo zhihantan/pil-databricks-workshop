@@ -31,7 +31,15 @@ DEFAULT_CRON = "0 0 3 * * ?"
 # OpenAI-compatible client used by 08's governed vision path (llm.chat) and is
 # not preinstalled on serverless.
 ENVIRONMENT_KEY = "pil_env"
-ENVIRONMENT_DEPS = ["PyYAML", "openai"]
+# The serverless base runtime ships older databricks-sdk (~0.49, no
+# genie.create_space) and mlflow (~2.21). Pin newer ones so notebook 06 (Genie
+# space creation) and 11 (UC model registration/serving) have the needed APIs.
+ENVIRONMENT_DEPS = [
+    "PyYAML",
+    "openai",
+    "databricks-sdk>=0.86",
+    "mlflow>=2.16",
+]
 
 
 @dataclass(frozen=True)

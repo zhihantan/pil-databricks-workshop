@@ -9,7 +9,7 @@
 # ---------------------------------------------------------------------------
 
 # --- Databricks platform SDKs (programmatic asset creation) ---
-databricks-sdk>=0.40.0
+databricks-sdk>=0.86.0   # >=0.86 required for genie.create_space (notebook 06)
 databricks-sql-connector>=3.6.0
 
 # --- Data generation & processing (deterministic synthetic data) ---
