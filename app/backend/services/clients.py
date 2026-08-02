@@ -29,6 +29,22 @@ def workspace_client() -> Any | None:
 
 
 @lru_cache
+def text_endpoint_name() -> str | None:
+    """Resolve the governed FMAPI text endpoint via pil_workshop.llm (cached).
+
+    Same endpoint the notebooks use, so app extraction traffic is governed and
+    shows up on dashboard Page 4. Honors PIL_TEXT_ENDPOINT override.
+    """
+    try:
+        from pil_workshop import llm
+
+        return llm.resolve_endpoints(workspace_client()).text
+    except Exception as exc:  # noqa: BLE001
+        LOG.warning("Could not resolve text endpoint: %s", exc)
+        return None
+
+
+@lru_cache
 def sql_connection_params() -> tuple[str, str, str] | None:
     """Return (host, http_path, token) for the SQL connector, or None."""
     settings = get_settings()

@@ -8,6 +8,29 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class InvoiceLineItem(BaseModel):
+    description: str | None = None
+    amount: float | None = None
+
+
+class ExtractedInvoice(BaseModel):
+    """Structured output of the upload → parse → extract flow."""
+
+    file_name: str
+    volume_path: str
+    invoice_no: str | None = None
+    customer: str | None = None
+    po_number: str | None = None
+    currency: str | None = None
+    date: str | None = None
+    payment_terms: str | None = None
+    subtotal: float | None = None
+    tax: float | None = None
+    total: float | None = None
+    line_items: list[InvoiceLineItem] = Field(default_factory=list)
+    exception_type: str | None = None
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok", "degraded"] = "ok"
     lakebase: bool = Field(description="Whether Lakebase is reachable")

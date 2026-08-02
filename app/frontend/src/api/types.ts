@@ -1,5 +1,26 @@
 // API response types mirroring backend/models/schemas.py.
 
+export interface InvoiceLineItem {
+  description: string | null;
+  amount: number | null;
+}
+
+export interface ExtractedInvoice {
+  file_name: string;
+  volume_path: string;
+  invoice_no: string | null;
+  customer: string | null;
+  po_number: string | null;
+  currency: string | null;
+  date: string | null;
+  payment_terms: string | null;
+  subtotal: number | null;
+  tax: number | null;
+  total: number | null;
+  line_items: InvoiceLineItem[];
+  exception_type: string | null;
+}
+
 export interface HealthResponse {
   status: "ok" | "degraded";
   lakebase: boolean;

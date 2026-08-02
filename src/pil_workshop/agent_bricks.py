@@ -204,6 +204,39 @@ JOIN nested_clean nc ON fl.file_name = nc.file_name
 """.strip()
 
 
+def build_single_invoice_extraction_sql(text_endpoint: str, file_path: str) -> str:
+    """Return SQL that extracts ONE invoice PDF at ``file_path`` in a single row.
+
+    Used by the app's upload flow: parse + ai_extract (flat) + ai_query (nested),
+    scoped to one file. Returns columns: invoice_no, customer, po_number,
+    currency, flat_total, nested_json (raw model JSON — caller strips/parses).
+    """
+    # Escape single quotes in the path defensively (paths are server-controlled,
+    # but keep this robust).
+    safe_path = file_path.replace("'", "''")
+    return f"""
+WITH parsed AS (
+    SELECT array_join(
+        transform(
+            try_cast(ai_parse_document(content):document:elements AS ARRAY<STRING>),
+            x -> get_json_object(x, '$.content')
+        ), '\\n') AS text
+    FROM READ_FILES('{safe_path}', format => 'binaryFile')
+)
+SELECT
+    ai_extract(text, array('invoice_no','customer','po_number','currency','total')) AS flat,
+    ai_query(
+        '{text_endpoint}',
+        CONCAT(
+            'Extract this freight invoice as JSON with keys: invoice_no, date, ',
+            'customer, po_number, currency, line_items (array of objects with ',
+            'description and amount), subtotal, tax, total, payment_terms. ',
+            'Return ONLY JSON.\\n\\nTEXT:\\n', text)
+    ) AS nested_json
+FROM parsed
+""".strip()
+
+
 def build_invoice_reconciliation_sql(catalog: str) -> str:
     """Return SQL that flags invoice exceptions from the EXTRACTED data itself.
 

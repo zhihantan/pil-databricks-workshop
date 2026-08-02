@@ -2,6 +2,7 @@
 // the Vite dev server proxies /api to localhost:8000.
 
 import type {
+  ExtractedInvoice,
   HealthResponse,
   InspectionItem,
   InvoiceDecisionRequest,
@@ -36,6 +37,22 @@ export const api = {
 
   listInvoices: (status?: string) =>
     req<InvoiceQueueItem[]>(`/api/invoices${status ? `?status=${status}` : ""}`),
+  uploadInvoice: async (fileToUpload: File): Promise<ExtractedInvoice> => {
+    const form = new FormData();
+    form.append("file", fileToUpload);
+    // No Content-Type header — the browser sets the multipart boundary.
+    const res = await fetch("/api/invoices/upload", { method: "POST", body: form });
+    if (!res.ok) {
+      let detail = res.statusText;
+      try {
+        detail = (await res.json()).detail ?? detail;
+      } catch {
+        /* non-JSON */
+      }
+      throw new Error(`${res.status}: ${detail}`);
+    }
+    return (await res.json()) as ExtractedInvoice;
+  },
   decideInvoice: (fileName: string, body: InvoiceDecisionRequest) =>
     req<{ decision: string }>(`/api/invoices/${encodeURIComponent(fileName)}/decision`, {
       method: "POST",

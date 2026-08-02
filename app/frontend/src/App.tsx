@@ -3,9 +3,11 @@ import { About } from "./pages/About";
 import { Home } from "./pages/Home";
 import { Inspections } from "./pages/Inspections";
 import { InvoiceReview } from "./pages/InvoiceReview";
+import { UploadExtract } from "./pages/UploadExtract";
 
 const NAV = [
   { to: "/", label: "Home", icon: "🏠", end: true },
+  { to: "/upload", label: "Upload & Extract", icon: "📤" },
   { to: "/invoices", label: "Invoice Review", icon: "🧾" },
   { to: "/inspections", label: "Container Inspections", icon: "📦" },
   { to: "/about", label: "About", icon: "🧭" },
@@ -36,6 +38,7 @@ export function App() {
       <main className="content">
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/upload" element={<UploadExtract />} />
           <Route path="/invoices" element={<InvoiceReview />} />
           <Route path="/inspections" element={<Inspections />} />
           <Route path="/about" element={<About />} />
