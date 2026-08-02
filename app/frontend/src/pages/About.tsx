@@ -40,8 +40,15 @@ export function About() {
         </pre>
         <ul className="muted" style={{ lineHeight: 1.9 }}>
           <li>
+            <strong>Upload &amp; Extract:</strong> a PDF you upload is saved to the
+            governed <code>bronze/raw_invoices</code> volume, parsed with
+            <code> ai_parse_document</code>, then extracted with <code>ai_extract</code>{" "}
+            (header fields) + <code>ai_query</code> (line items) into structured data.
+          </li>
+          <li>
             <strong>Governed AI:</strong> every model call routes through the same
-            Unity-AI-Gateway FMAPI endpoints as the notebooks — no external providers.
+            Unity-AI-Gateway FMAPI endpoints as the notebooks — no external providers,
+            so the app's extraction is rate-limited, usage-tracked, and shows on Page 4.
           </li>
           <li>
             <strong>Reverse-ETL loop:</strong> analytical exceptions → Lakebase review

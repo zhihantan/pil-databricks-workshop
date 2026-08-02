@@ -32,8 +32,9 @@ env:
 #   * serving_endpoint — CAN QUERY on the governed FMAPI text + vision endpoints
 #                        so app model traffic appears on Dashboard Page 4.
 #   * database (Lakebase) — CAN CONNECT to the pil-workshop-db instance.
-#   * volume          — READ VOLUME on bronze.raw_invoices + bronze.container_images
-#                        for PDF/image previews.
+#   * volume          — READ VOLUME on bronze.container_images (image previews)
+#                        and READ+WRITE VOLUME on bronze.raw_invoices (the Upload
+#                        & Extract flow saves uploaded PDFs there).
 # Declare them in the Databricks App UI (Resources) or via the Apps API.
 # ---------------------------------------------------------------------------
 resources:
