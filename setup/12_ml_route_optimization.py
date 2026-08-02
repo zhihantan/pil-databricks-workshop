@@ -39,7 +39,12 @@ _add_repo_src_to_path()
 
 # COMMAND ----------
 
-# MAGIC %pip install "ortools==9.11.4210" "numpy==1.26.4" "pandas==1.5.3" "protobuf==5.29.4"
+# ortools hard-requires pandas>=2.0 / numpy>=2.0, but Databricks serverless pins
+# pandas 1.5.x / numpy 1.26.x — installing ortools normally either upgrades them
+# (killing the pyspark/pyarrow kernel) or is blocked by the runtime constraint
+# file. The solvers we use (min_cost_flow, routing) only need protobuf at runtime
+# (already present), so install with --no-deps to leave the core stack intact.
+# MAGIC %pip install --no-deps "ortools==9.11.4210"
 
 # COMMAND ----------
 
