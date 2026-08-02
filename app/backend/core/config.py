@@ -14,7 +14,14 @@ from functools import lru_cache
 
 
 def _ensure_pil_workshop_importable() -> None:
-    """Add the repo ``src`` dir to sys.path if pil_workshop isn't installed."""
+    """Make ``pil_workshop`` importable in every runtime.
+
+    In the deployed Databricks App only the ``app/`` folder ships (no pip build
+    step, no sibling ``src/``), so a vendored copy lives at ``app/pil_workshop``
+    next to ``backend``; adding ``app/`` to ``sys.path`` picks it up. Locally
+    (repo checkout, notebooks, tests) the source of truth ``src/pil_workshop``
+    is used instead. Try both.
+    """
     try:
         import pil_workshop  # noqa: F401
 
@@ -22,10 +29,14 @@ def _ensure_pil_workshop_importable() -> None:
     except Exception:  # noqa: BLE001
         here = os.path.dirname(os.path.abspath(__file__))
         # backend/core → backend → app → repo root
-        repo = os.path.dirname(os.path.dirname(os.path.dirname(here)))
-        src = os.path.join(repo, "src")
-        if os.path.isdir(os.path.join(src, "pil_workshop")) and src not in sys.path:
-            sys.path.insert(0, src)
+        app_dir = os.path.dirname(os.path.dirname(here))
+        repo = os.path.dirname(app_dir)
+        for candidate in (app_dir, os.path.join(repo, "src")):
+            if (
+                os.path.isdir(os.path.join(candidate, "pil_workshop"))
+                and candidate not in sys.path
+            ):
+                sys.path.insert(0, candidate)
 
 
 _ensure_pil_workshop_importable()
