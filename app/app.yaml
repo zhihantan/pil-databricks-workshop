@@ -18,6 +18,11 @@ env:
   # Catalog the app reads analytics from (override per deployment).
   - name: PIL_CATALOG
     value: "pil_workshop"
+  # Serverless SQL warehouse the app runs Unity Catalog reads + invoice
+  # extraction against. Without this the SQL connector can't connect and the
+  # app falls back to demo KPIs / extraction fails. Override per deployment.
+  - name: PIL_WAREHOUSE_ID
+    value: "01427ef1c429a676"
   # Lakebase instance name; app mints its own credential via the SDK.
   - name: PIL_LAKEBASE_INSTANCE
     value: "pil-workshop-db"

@@ -44,6 +44,24 @@ def text_endpoint_name() -> str | None:
         return None
 
 
+def _bearer_token(wc: Any) -> str | None:
+    """Resolve a bearer token for the SQL connector.
+
+    ``wc.config.token`` is ``None`` when the app authenticates via OAuth
+    (``oauth-m2m`` — the default for a Databricks App service principal), so
+    fall back to ``config.authenticate()`` which returns an ``Authorization``
+    header for whatever auth the runtime has (OAuth, PAT, or ambient). Mirrors
+    ``pil_workshop.llm.get_openai_client``.
+    """
+    token = getattr(wc.config, "token", None)
+    if token:
+        return token
+    auth_header = wc.config.authenticate().get("Authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        return auth_header.split(" ", 1)[1]
+    return None
+
+
 @lru_cache
 def sql_connection_params() -> tuple[str, str, str] | None:
     """Return (host, http_path, token) for the SQL connector, or None."""
@@ -53,7 +71,10 @@ def sql_connection_params() -> tuple[str, str, str] | None:
         return None
     try:
         host = wc.config.host
-        token = wc.config.token
+        token = _bearer_token(wc)
+        if not token:
+            LOG.warning("No bearer token available for SQL connector.")
+            return None
         http_path = f"/sql/1.0/warehouses/{settings.warehouse_id}"
         return host, http_path, token
     except Exception as exc:  # noqa: BLE001
@@ -61,26 +82,44 @@ def sql_connection_params() -> tuple[str, str, str] | None:
         return None
 
 
-def sql_query(sql: str) -> list[dict[str, Any]]:
-    """Run a UC read via the Databricks SQL connector; [] if unavailable."""
+def _run_sql(sql: str) -> list[dict[str, Any]]:
+    """Execute SQL via the Databricks SQL connector; raise on any failure."""
     params = sql_connection_params()
     if params is None:
-        return []
+        raise RuntimeError(
+            "No SQL warehouse connection. Grant the app CAN USE on a serverless "
+            "warehouse and set PIL_WAREHOUSE_ID."
+        )
     host, http_path, token = params
-    try:
-        from databricks import sql as dbsql
+    from databricks import sql as dbsql
 
-        with dbsql.connect(
-            server_hostname=host.replace("https://", ""),
-            http_path=http_path,
-            access_token=token,
-        ) as conn, conn.cursor() as cur:
-            cur.execute(sql)
-            cols = [c[0] for c in cur.description]
-            return [dict(zip(cols, row, strict=False)) for row in cur.fetchall()]
+    with dbsql.connect(
+        server_hostname=host.replace("https://", ""),
+        http_path=http_path,
+        access_token=token,
+    ) as conn, conn.cursor() as cur:
+        cur.execute(sql)
+        cols = [c[0] for c in cur.description]
+        return [dict(zip(cols, row, strict=False)) for row in cur.fetchall()]
+
+
+def sql_query(sql: str) -> list[dict[str, Any]]:
+    """Run a UC read via the Databricks SQL connector; [] if unavailable.
+
+    Read paths (KPIs, lists) degrade gracefully to an empty result so the app
+    still renders when a table/warehouse is missing. Paths that must surface
+    failures (invoice extraction) call ``sql_query_strict`` instead.
+    """
+    try:
+        return _run_sql(sql)
     except Exception as exc:  # noqa: BLE001
-        LOG.warning("SQL query failed: %s", exc)
+        LOG.warning("SQL query failed (returning []): %s", exc)
         return []
+
+
+def sql_query_strict(sql: str) -> list[dict[str, Any]]:
+    """Run SQL and raise on failure (so the caller reports a real error)."""
+    return _run_sql(sql)
 
 
 @lru_cache
