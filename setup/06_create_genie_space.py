@@ -87,22 +87,40 @@ else:
 
 # COMMAND ----------
 
-space_id = dbx_api.create_genie_space(
-    title=space["title"],
-    warehouse_id=warehouse_id,
-    table_identifiers=tables,
-    instructions=space["instructions"],
-    sample_questions=space["sample_questions"],
-    client=wc,
-)
+# Idempotency: if a space with this title already exists, reuse it rather than
+# creating duplicates on every run.
+space_id = None
+try:
+    for s in wc.genie.list_spaces():
+        if getattr(s, "title", None) == space["title"]:
+            space_id = getattr(s, "space_id", None)
+            break
+except Exception:  # noqa: BLE001
+    pass
 
 if space_id:
-    ok(f"Genie space created (id={space_id}).")
+    ok(f"Genie space already exists (id={space_id}); reusing.")
+else:
+    space_id = dbx_api.create_genie_space(
+        title=space["title"],
+        warehouse_id=warehouse_id,
+        table_identifiers=tables,
+        instructions=space["instructions"],
+        sample_questions=space["sample_questions"],
+        client=wc,
+        description=space.get("description"),
+    )
+
+if space_id:
+    ok(f"Genie space ready (id={space_id}).")
     try:
         host = spark.conf.get("spark.databricks.workspaceUrl")
         print(f"  Open: https://{host}/genie/rooms/{space_id}")
     except Exception:  # noqa: BLE001
         pass
+    print("  NOTE: tables are bound via API; add the Instructions and sample "
+          "questions from space_config.yml in the Genie UI (not expressible in "
+          "the current serialized-space API).")
 else:
     warn("Programmatic Genie creation unavailable here — use the UI (below).")
 

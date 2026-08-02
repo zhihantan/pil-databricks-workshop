@@ -150,9 +150,14 @@ def create_or_update_lakeview_dashboard(
 # ===========================================================================
 # Genie spaces
 # ===========================================================================
-# Docs: https://docs.databricks.com/api/workspace/genie
-# Programmatic Genie-space creation is newer/preview in some regions. We try
-# the SDK; if unavailable we return None so the caller prints the UI steps.
+# Docs: https://docs.databricks.com/api/workspace/genie/createspace
+# The SDK's genie.create_space takes a *serialized_space* string — a versioned
+# "export proto" (version 1/2). The minimal valid payload that binds a space to
+# tables is:
+#   {"version": 1, "data_sources": {"tables": [{"identifier": "<3-level>"}, ...]}}
+# with the tables SORTED by identifier. Instructions/sample-questions are not
+# expressible in this proto version, so they remain documented for the UI and
+# live in assets/genie/space_config.yml. Discovered empirically on serverless.
 def create_genie_space(
     title: str,
     warehouse_id: str,
@@ -160,28 +165,46 @@ def create_genie_space(
     instructions: str,
     sample_questions: list[str],
     client: Any | None = None,
+    description: str | None = None,
+    parent_path: str | None = None,
 ) -> str | None:
-    """Attempt to create a Genie space via the SDK; return space id or None.
+    """Create a Genie space bound to ``table_identifiers``; return space id or None.
 
-    Returns ``None`` (rather than raising) when the API is not available in
-    this region/workspace, so the setup notebook can fall back to documented
-    UI steps. Genie Code / partner-powered features may need account+workspace
-    enablement in ``southeastasia``.
+    Returns ``None`` (rather than raising) when the API is unavailable, so the
+    setup notebook can fall back to documented UI steps. ``instructions`` and
+    ``sample_questions`` are accepted for signature compatibility but are added
+    via the UI (not supported by the serialized-space proto here).
     """
+    import json
+
     wc = _ws(client)
     genie = getattr(wc, "genie", None)
     create_fn = getattr(genie, "create_space", None) if genie else None
     if create_fn is None:
         LOG.info("SDK Genie space creation not available; caller should use UI.")
         return None
+
+    # Tables MUST be sorted by identifier or the export proto is rejected.
+    tables = [{"identifier": t} for t in sorted(set(table_identifiers))]
+    serialized = json.dumps({"version": 1, "data_sources": {"tables": tables}})
+
+    if parent_path is None:
+        try:
+            parent_path = f"/Users/{wc.current_user.me().user_name}"
+        except Exception:  # noqa: BLE001
+            parent_path = None
+
     try:
-        space = create_fn(  # pragma: no cover - preview API, platform-only
-            title=title,
-            warehouse_id=warehouse_id,
-            table_identifiers=table_identifiers,
-            instructions=instructions,
-            sample_questions=sample_questions,
-        )
+        kwargs: dict[str, Any] = {
+            "warehouse_id": warehouse_id,
+            "serialized_space": serialized,
+            "title": title,
+        }
+        if description:
+            kwargs["description"] = description
+        if parent_path:
+            kwargs["parent_path"] = parent_path
+        space = create_fn(**kwargs)  # pragma: no cover - platform-only
         return getattr(space, "space_id", None) or getattr(space, "id", None)
     except Exception as exc:  # noqa: BLE001
         LOG.warning("Genie space API call failed (%s); fall back to UI.", exc)

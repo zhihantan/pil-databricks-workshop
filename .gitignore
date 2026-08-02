@@ -14,7 +14,9 @@ env/
 # Node / frontend
 app/frontend/node_modules/
 app/frontend/dist/
-app/backend/static/
+# NOTE: app/backend/static/ (the built Vite bundle) IS committed on purpose:
+# Databricks Apps deploy from the Git-folder source with no build step, so the
+# SPA must ship prebuilt. Rebuild with `cd app/frontend && npm run build`.
 npm-debug.log*
 yarn-error.log*
 .pnpm-debug.log*

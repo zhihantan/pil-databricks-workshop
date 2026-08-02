@@ -192,18 +192,31 @@ print(summary_table(rows, ["model", "wape", "champion"]))
 
 mlflow.set_registry_uri("databricks-uc")
 model_name = f"{CATALOG}.{config.ML}.spare_parts_forecaster"
+champion_version = None
 try:
+    # Ensure a valid experiment exists (ambient in interactive notebooks, but a
+    # Job task may not have one set, which makes start_run fail).
+    try:
+        me = WorkspaceClient().current_user.me().user_name
+        mlflow.set_experiment(f"/Users/{me}/pil_workshop_forecasting")
+    except Exception:  # noqa: BLE001 - fall back to the ambient experiment
+        pass
+
     with mlflow.start_run(run_name="pil_spare_parts_forecast") as run:
         mlflow.log_metrics({f"wape_{k}": v for k, v in candidates.items()})
         mlflow.log_metric("champion_wape", candidates[champion])
         mlflow.log_param("champion", champion)
         mlflow.log_param("horizon_days", HORIZON)
         if champion == "lightgbm_global":
-            mlflow.lightgbm.log_model(
-                model, artifact_path="model",
-                registered_model_name=model_name,
+            # Two-step: log to the run, then explicitly register + capture the
+            # version. The one-step `registered_model_name=` can create the
+            # model container without an attached version on UC in a Job.
+            info = mlflow.lightgbm.log_model(
+                model, name="model", input_example=train_df[feature_cols].head(2)
             )
-            ok(f"Registered LightGBM champion to UC: {model_name}")
+            mv = mlflow.register_model(info.model_uri, model_name)
+            champion_version = mv.version
+            ok(f"Registered LightGBM champion to UC: {model_name} v{mv.version}")
         else:
             warn(f"Champion is a baseline ({champion}); logging metrics only. "
                  "LightGBM is registered when it wins on WAPE.")
@@ -253,18 +266,23 @@ ok(f"Wrote {len(future_rows):,} forecast rows → gold.demand_forecasts "
 
 # COMMAND ----------
 
-if champion == "lightgbm_global":
+if champion == "lightgbm_global" and champion_version:
     try:
         from databricks.sdk import WorkspaceClient
 
         from pil_workshop import dbx_api
         wc = WorkspaceClient()
-        # Serve version 1 of the just-registered champion (bump as you retrain).
+        # Serve the exact version we just registered (not a hardcoded "1").
         dbx_api.ensure_model_serving_endpoint(
-            "pil-spare-parts-forecaster", model_name, "1", client=wc)
-        ok("Serving endpoint requested: pil-spare-parts-forecaster")
+            "pil-spare-parts-forecaster", model_name, str(champion_version),
+            client=wc)
+        ok(f"Serving endpoint requested: pil-spare-parts-forecaster "
+           f"(model v{champion_version})")
     except Exception as exc:  # noqa: BLE001
         warn(f"Serving endpoint step skipped: {exc}")
+elif champion == "lightgbm_global":
+    warn("LightGBM won but no model version was registered; skipping serving. "
+         "See the MLflow/UC registry warning above.")
 
 print("\nDashboard tip: add a forecast-vs-actual line to the Commercial page "
       "using gold.demand_forecasts joined to recent consumption.")

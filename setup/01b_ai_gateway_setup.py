@@ -179,7 +179,7 @@ def _usage_source_exists() -> bool:
     """
     try:
         spark.sql(
-            f"SELECT requesttime, served_entity_name, requester, "
+            f"SELECT request_time, served_entity_id, requester, "
             f"input_token_count, output_token_count, status_code "
             f"FROM {SYSTEM_USAGE_TABLE} LIMIT 1"
         )
@@ -206,16 +206,23 @@ _EMPTY_USAGE_BASE = """
 
 gold = f"`{CATALOG}`.`{config.GOLD}`"
 if _usage_source_exists():
+    # The usage table carries served_entity_id; join system.serving.served_entities
+    # to resolve the human-readable endpoint name. Column is request_time (not
+    # requesttime). Scope to this workshop's endpoints so Page 4 reflects the
+    # governed FMAPI traffic, not every endpoint in the workspace.
     base = f"""
         SELECT
-            CAST(requesttime AS DATE)              AS usage_date,
-            served_entity_name                     AS endpoint,
-            requester                              AS user_name,
-            input_token_count                      AS input_tokens,
-            output_token_count                     AS output_tokens,
-            (input_token_count + output_token_count) AS total_tokens,
-            CASE WHEN status_code >= 400 THEN 1 ELSE 0 END AS is_error
-        FROM {SYSTEM_USAGE_TABLE}
+            CAST(u.request_time AS DATE)              AS usage_date,
+            COALESCE(e.endpoint_name, u.served_entity_id) AS endpoint,
+            u.requester                               AS user_name,
+            u.input_token_count                       AS input_tokens,
+            u.output_token_count                      AS output_tokens,
+            (COALESCE(u.input_token_count,0) + COALESCE(u.output_token_count,0)) AS total_tokens,
+            CASE WHEN u.status_code >= 400 THEN 1 ELSE 0 END AS is_error
+        FROM {SYSTEM_USAGE_TABLE} u
+        LEFT JOIN system.serving.served_entities e
+          ON u.served_entity_id = e.served_entity_id
+        WHERE u.request_time >= DATE_SUB(CURRENT_DATE(), 30)
     """
     ok("System usage table found — building live usage views.")
 else:
