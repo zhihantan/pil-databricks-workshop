@@ -2,9 +2,10 @@
 # MAGIC %md
 # MAGIC # 00 · One-Click Setup — PIL Data + AI Workshop
 # MAGIC
-# MAGIC Runs the entire workshop setup (phases 1–5) in order, with a **preflight
-# MAGIC check**, per-step timing, and a final summary of every asset created with its
-# MAGIC workspace URL.
+# MAGIC Provisions the whole workshop (phases 1–5). By default this notebook creates
+# MAGIC a **real Databricks Job** — one task per setup notebook (01–12) wired into a
+# MAGIC dependency DAG, on **serverless**, with a **daily** schedule — then triggers a
+# MAGIC run. That gives you a persistent, schedulable Workflow under **Workflows**.
 # MAGIC
 # MAGIC **Target:** Azure Databricks · `southeastasia` · serverless.
 # MAGIC
@@ -12,10 +13,14 @@
 # MAGIC |---|---|
 # MAGIC | `catalog` | Target UC catalog (default `pil_workshop`). |
 # MAGIC | `scale` | `demo` (fast) or `full` (master-prompt volumes). |
-# MAGIC | `skip_steps` | Comma-separated notebook prefixes to skip, e.g. `11,12`. |
-# MAGIC | `continue_on_error` | If `true`, keep going when a step fails. |
+# MAGIC | `orchestration` | `job` (create+run a daily Job — default) or `inline` (run in-process here). |
+# MAGIC | `run_now` | For `job` mode: trigger a run immediately after creating the Job. |
+# MAGIC | `schedule_cron` / `timezone` | Daily-refresh schedule (Quartz cron). |
+# MAGIC | `skip_steps` | (inline mode) comma-separated prefixes to skip, e.g. `11,12`. |
+# MAGIC | `continue_on_error` | (inline mode) keep going when a step fails. |
 # MAGIC
-# MAGIC Re-running is **no-op-safe** (idempotent). To remove everything, run `99_teardown`.
+# MAGIC Re-running is **no-op-safe**: the Job is reset-in-place by name; every notebook
+# MAGIC is idempotent. To remove everything, run `99_teardown`.
 
 # COMMAND ----------
 
@@ -45,24 +50,30 @@ SETUP_DIR = os.path.join(REPO_ROOT, "setup")
 
 from databricks.sdk import WorkspaceClient
 
-from pil_workshop import config, preflight
+from pil_workshop import config, job_builder, preflight
 from pil_workshop.utils import banner, fail, ok, safe_identifier, summary_table, warn
 
 dbutils.widgets.text("catalog", config.DEFAULT_CATALOG, "Catalog name")
 dbutils.widgets.dropdown("scale", config.DEFAULT_SCALE, ["demo", "full"], "Data scale")
-dbutils.widgets.text("skip_steps", "", "Skip steps (e.g. 11,12)")
-dbutils.widgets.dropdown("continue_on_error", "false", ["true", "false"], "Continue on error")
+dbutils.widgets.dropdown("orchestration", "job", ["job", "inline"], "Orchestration mode")
+dbutils.widgets.dropdown("run_now", "true", ["true", "false"], "Run the Job now (job mode)")
+dbutils.widgets.text("schedule_cron", job_builder.DEFAULT_CRON, "Daily schedule (Quartz cron)")
+dbutils.widgets.text("timezone", job_builder.DEFAULT_TIMEZONE, "Schedule timezone")
+dbutils.widgets.text("skip_steps", "", "Skip steps (inline mode, e.g. 11,12)")
+dbutils.widgets.dropdown("continue_on_error", "false", ["true", "false"], "Continue on error (inline)")
 
 CATALOG = safe_identifier(dbutils.widgets.get("catalog") or config.DEFAULT_CATALOG)
 SCALE = dbutils.widgets.get("scale") or config.DEFAULT_SCALE
+MODE = dbutils.widgets.get("orchestration") or "job"
+RUN_NOW = dbutils.widgets.get("run_now") == "true"
+CRON = dbutils.widgets.get("schedule_cron") or job_builder.DEFAULT_CRON
+TZ = dbutils.widgets.get("timezone") or job_builder.DEFAULT_TIMEZONE
 SKIP = {s.strip() for s in dbutils.widgets.get("skip_steps").split(",") if s.strip()}
 CONTINUE = dbutils.widgets.get("continue_on_error") == "true"
 
 wc = WorkspaceClient()
 banner("PIL Data + AI Workshop — One-Click Setup")
-print(f"  Catalog: {CATALOG} · Scale: {SCALE} · Region: {config.REGION}")
-if SKIP:
-    print(f"  Skipping steps: {sorted(SKIP)}")
+print(f"  Catalog: {CATALOG} · Scale: {SCALE} · Region: {config.REGION} · Mode: {MODE}")
 
 # COMMAND ----------
 
@@ -89,13 +100,90 @@ else:
 
 # COMMAND ----------
 
-# MAGIC %md ## Run the pipeline
-# MAGIC Each step is a child notebook run via `dbutils.notebook.run`, passing the
-# MAGIC catalog/scale widgets through. Timing and exit messages are collected.
+# MAGIC %md ## Resolve this notebook's workspace folder
+# MAGIC The Job's task notebook paths are workspace paths, so we need the folder this
+# MAGIC notebook lives in (its parent's `setup/`).
 
 # COMMAND ----------
 
-# (step-prefix, notebook, base-timeout-seconds). Prefix matches skip_steps.
+
+def _workspace_setup_dir() -> str:
+    """Return the workspace path of the `setup/` folder holding these notebooks."""
+    try:
+        ctx = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
+        nb_path = ctx.notebookPath().get()  # e.g. /Users/me/repo/setup/00_setup_all
+        return nb_path.rsplit("/", 1)[0]
+    except Exception as exc:  # noqa: BLE001
+        warn(f"Could not resolve notebook path via context ({exc}); "
+             "falling back to a Repos-style guess.")
+        me = wc.current_user.me().user_name
+        return f"/Workspace/Users/{me}/pil-databricks-workshop/setup"
+
+
+def _host() -> str:
+    try:
+        return "https://" + spark.conf.get("spark.databricks.workspaceUrl")
+    except Exception:  # noqa: BLE001
+        return wc.config.host
+
+# COMMAND ----------
+
+# MAGIC %md ## Resolve a serverless SQL warehouse (for dashboard/Genie tasks)
+
+# COMMAND ----------
+
+from pil_workshop import dbx_api
+
+WAREHOUSE_ID = dbx_api.get_serverless_warehouse_id(wc) or None
+if WAREHOUSE_ID:
+    ok(f"Serverless warehouse: {WAREHOUSE_ID}")
+else:
+    warn("No serverless warehouse found; dashboard/Genie tasks will need one assigned.")
+
+# COMMAND ----------
+
+# MAGIC %md ## Orchestrate
+
+# COMMAND ----------
+
+if MODE == "job":
+    banner("Creating the Databricks Job (daily schedule)")
+    setup_dir = _workspace_setup_dir()
+    print(f"  Notebook root: {setup_dir}")
+    print(f"  Schedule: cron='{CRON}' tz='{TZ}' (daily refresh)")
+
+    job_id = job_builder.create_or_update_job(
+        wc, setup_dir, catalog=CATALOG, scale=SCALE,
+        warehouse_id=WAREHOUSE_ID, timezone=TZ, cron=CRON, paused=False,
+    )
+    url = job_builder.job_url(_host(), job_id)
+    ok(f"Job ready: {url}")
+
+    run_id = None
+    if RUN_NOW:
+        run = wc.jobs.run_now(job_id=job_id)
+        run_id = run.run_id
+        run_url = f"{_host()}/jobs/{job_id}/runs/{run_id}"
+        ok(f"Triggered run: {run_url}")
+        print("  Watch progress under Workflows → Jobs, or re-open this URL.")
+
+    try:
+        dbutils.jobs.taskValues.set(key="job_id", value=str(job_id))
+    except Exception:  # noqa: BLE001
+        pass
+
+    dbutils.notebook.exit(
+        f"Job created ({job_id}) with daily schedule; "
+        f"run_now={RUN_NOW}" + (f" run_id={run_id}" if run_id else "")
+    )
+
+# COMMAND ----------
+
+# MAGIC %md ## Inline mode (run steps in-process here)
+# MAGIC Kept for quick single-session runs. Uses `dbutils.notebook.run` per step.
+
+# COMMAND ----------
+
 STEPS = [
     ("01", "01_create_catalog_schemas", 600),
     ("01b", "01b_ai_gateway_setup", 600),
@@ -140,7 +228,7 @@ for prefix, notebook, timeout in STEPS:
 
 # COMMAND ----------
 
-# MAGIC %md ## Summary — steps
+# MAGIC %md ### Inline summary + created assets
 
 # COMMAND ----------
 
@@ -150,41 +238,17 @@ total_s = sum(r["seconds"] for r in results)
 n_ok = sum(1 for r in results if r["status"] == "OK")
 print(f"\n  {n_ok}/{len(results)} steps OK · total {total_s:.1f}s")
 
-# COMMAND ----------
-
-# MAGIC %md ## Summary — created assets & URLs
-
-# COMMAND ----------
-
-try:
-    host = spark.conf.get("spark.databricks.workspaceUrl")
-except Exception:  # noqa: BLE001
-    host = "<workspace-host>"
-
+host = _host()
 assets = [
-    {"asset": "Catalog", "name": CATALOG,
-     "url": f"https://{host}/explore/data/{CATALOG}"},
-    {"asset": "Gold KPIs (MV)", "name": "mv_daily_operations_kpis",
-     "url": f"https://{host}/explore/data/{CATALOG}/gold/mv_daily_operations_kpis"},
-    {"asset": "Dashboard", "name": "PIL Operations",
-     "url": f"https://{host}/dashboardsv3"},
-    {"asset": "Genie", "name": "PIL Shipping Operations",
-     "url": f"https://{host}/genie"},
-    {"asset": "App", "name": "pil-invoice-vision",
-     "url": f"https://{host}/apps"},
-    {"asset": "Forecasts", "name": "gold.demand_forecasts",
-     "url": f"https://{host}/explore/data/{CATALOG}/gold/demand_forecasts"},
-    {"asset": "Repositioning", "name": "gold.repositioning_plan",
-     "url": f"https://{host}/explore/data/{CATALOG}/gold/repositioning_plan"},
+    {"asset": "Catalog", "name": CATALOG, "url": f"{host}/explore/data/{CATALOG}"},
+    {"asset": "Dashboard", "name": "PIL Operations", "url": f"{host}/dashboardsv3"},
+    {"asset": "Genie", "name": "PIL Shipping Operations", "url": f"{host}/genie"},
+    {"asset": "App", "name": "pil-invoice-vision", "url": f"{host}/apps"},
 ]
 print(summary_table(assets, ["asset", "name", "url"]))
 
-banner("Next: open the dashboard & Genie (Part 1), then the app (Part 2).")
-print("  Facilitator guide: docs/facilitator_guide.md")
-print("  Participant guide: docs/participant_guide.md")
-
 failed = [r for r in results if r["status"] == "FAILED"]
 dbutils.notebook.exit(
-    f"Setup {'OK' if not failed else 'completed with failures'} · "
+    f"Inline setup {'OK' if not failed else 'completed with failures'} · "
     f"{n_ok}/{len(results)} steps · {total_s:.1f}s"
 )
