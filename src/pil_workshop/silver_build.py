@@ -320,10 +320,31 @@ def build_all_silver(spark: Any, catalog: str) -> list[tuple[str, int]]:
         spark.sql(
             f"COMMENT ON TABLE {target} IS 'Silver (cleaned, conformed) — {name} for PIL workshop.'"
         )
-        spark.sql(f"ALTER TABLE {target} SET TAGS ('domain' = 'shipping')")
+        _apply_domain_tag(spark, target)
         written.append((name, cnt))
         LOG.info("Silver %s: %d rows", name, cnt)
     return written
+
+
+# Some workspaces enforce a UC tag policy that restricts allowed values for the
+# `domain` key. We try our preferred value first, then policy-friendly
+# fallbacks, and finally give up gracefully — a rejected tag must never fail the
+# whole Silver build (the tables/comments are what matter).
+_DOMAIN_TAG_CANDIDATES = ("supply_chain", "operations", "shipping")
+
+
+def _apply_domain_tag(spark: Any, target: str) -> None:
+    for value in _DOMAIN_TAG_CANDIDATES:
+        try:
+            spark.sql(f"ALTER TABLE {target} SET TAGS ('domain' = '{value}')")
+            return
+        except Exception as exc:  # noqa: BLE001
+            msg = str(exc).lower()
+            if "not an allowed value" in msg or "tag policy" in msg:
+                continue  # try the next policy-friendly value
+            LOG.warning("Could not set domain tag on %s: %s", target, exc)
+            return
+    LOG.warning("No allowed 'domain' tag value accepted for %s; skipping tag.", target)
 
 
 # ---------------------------------------------------------------------------
