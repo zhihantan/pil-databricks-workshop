@@ -123,9 +123,15 @@ def test_build_serialized_space_v2_shape_and_sorting():
                 {"question": "q2", "sql": "SELECT 2"},
             ],
             benchmarks=[{"question": "bq", "sql": "SELECT 3"}],
+            sample_questions=["Question B?", "Question A?"],
         )
     )
     assert s["version"] == 2
+    # suggested questions live under config.sample_questions, sorted by id
+    sq = s["config"]["sample_questions"]
+    assert len(sq) == 2
+    assert [q["id"] for q in sq] == sorted(q["id"] for q in sq)
+    assert {q["question"][0] for q in sq} == {"Question A?", "Question B?"}
     # tables sorted by identifier
     idents = [t["identifier"] for t in s["data_sources"]["tables"]]
     assert idents == sorted(idents)

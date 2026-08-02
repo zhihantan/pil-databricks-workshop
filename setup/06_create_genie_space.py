@@ -128,9 +128,9 @@ if space_id:
         print(f"  Open: https://{host}/genie/rooms/{space_id}")
     except Exception:  # noqa: BLE001
         pass
-    print("  Bound via API: tables, instructions, example SQL, and benchmarks.")
-    print("  Pin these benchmark-VERIFIED common questions in the Genie UI "
-          "(suggested questions aren't settable via the serialized-space API):")
+    print("  Fully configured via API — no UI steps needed. Bound: tables, "
+          "warehouse, instructions, example SQL, benchmarks, and these "
+          "benchmark-VERIFIED suggested questions:")
     for _q in space.get("sample_questions", []):
         print(f"    • {_q}")
 else:

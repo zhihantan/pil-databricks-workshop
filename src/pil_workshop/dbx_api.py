@@ -169,11 +169,14 @@ def build_serialized_space(
     text_instructions: str | None = None,
     example_sqls: list[dict[str, Any]] | None = None,
     benchmarks: list[dict[str, Any]] | None = None,
+    sample_questions: list[str] | None = None,
 ) -> str:
     """Build a v2 ``serialized_space`` JSON string from workshop content.
 
     ``example_sqls`` items: {question, sql, usage_guidance?}.
     ``benchmarks`` items: {question, sql}.
+    ``sample_questions``: the suggested questions shown in the Genie UI
+    (stored under ``config.sample_questions``).
     Tables are sorted (the proto rejects unsorted). IDs are random 32-hex.
     """
     import json
@@ -224,6 +227,10 @@ def build_serialized_space(
             for b in benchmarks
         ]
         space["benchmarks"] = {"questions": sorted(questions, key=lambda x: x["id"])}
+    if sample_questions:
+        # Suggested questions shown in the Genie UI live under config.sample_questions.
+        sq = [{"id": _hid(), "question": [q]} for q in sample_questions]
+        space["config"] = {"sample_questions": sorted(sq, key=lambda x: x["id"])}
     return json.dumps(space)
 
 
@@ -258,6 +265,7 @@ def create_genie_space(
     serialized = build_serialized_space(
         table_identifiers, text_instructions=instructions,
         example_sqls=example_sqls, benchmarks=benchmarks,
+        sample_questions=sample_questions,
     )
 
     if parent_path is None:
