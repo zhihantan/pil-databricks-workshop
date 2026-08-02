@@ -113,6 +113,9 @@ else:
         client=wc,
         description=space.get("description"),
     )
+    _genie_err = getattr(dbx_api.create_genie_space, "last_error", None)
+    if _genie_err:
+        warn(f"Genie create error: {_genie_err}")
 
 if space_id:
     ok(f"Genie space ready (id={space_id}).")
@@ -156,4 +159,8 @@ try:
 except Exception:  # noqa: BLE001
     pass
 
-dbutils.notebook.exit(f"06 complete · genie_space_id={space_id}")
+_err = getattr(dbx_api.create_genie_space, "last_error", None)
+dbutils.notebook.exit(
+    f"06 complete · genie_space_id={space_id}"
+    + (f" · err={_err}" if _err and not space_id else "")
+)

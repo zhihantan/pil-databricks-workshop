@@ -193,6 +193,7 @@ print(summary_table(rows, ["model", "wape", "champion"]))
 mlflow.set_registry_uri("databricks-uc")
 model_name = f"{CATALOG}.{config.ML}.spare_parts_forecaster"
 champion_version = None
+registry_error = None
 try:
     # Ensure a valid experiment exists (ambient in interactive notebooks, but a
     # Job task may not have one set, which makes start_run fail).
@@ -221,7 +222,10 @@ try:
             warn(f"Champion is a baseline ({champion}); logging metrics only. "
                  "LightGBM is registered when it wins on WAPE.")
 except Exception as exc:  # noqa: BLE001
+    import traceback as _tb
+    registry_error = f"{type(exc).__name__}: {exc}"
     warn(f"MLflow/UC registry step degraded: {exc}")
+    print(_tb.format_exc()[:1500])
 
 # COMMAND ----------
 
@@ -287,4 +291,7 @@ elif champion == "lightgbm_global":
 print("\nDashboard tip: add a forecast-vs-actual line to the Commercial page "
       "using gold.demand_forecasts joined to recent consumption.")
 
-dbutils.notebook.exit(f"11 complete · champion={champion} wape={candidates[champion]:.3f}")
+dbutils.notebook.exit(
+    f"11 complete · champion={champion} wape={candidates[champion]:.3f}"
+    + (f" · registry_err={registry_error}" if registry_error else "")
+)

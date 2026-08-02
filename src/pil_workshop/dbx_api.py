@@ -208,6 +208,7 @@ def create_genie_space(
         return getattr(space, "space_id", None) or getattr(space, "id", None)
     except Exception as exc:  # noqa: BLE001
         LOG.warning("Genie space API call failed (%s); fall back to UI.", exc)
+        create_genie_space.last_error = f"{type(exc).__name__}: {exc}"  # type: ignore[attr-defined]
         return None
 
 
