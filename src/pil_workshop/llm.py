@@ -216,7 +216,12 @@ def resolve_endpoints(
 # OpenAI-compatible client, pointed ONLY at the workspace serving endpoints.
 # ---------------------------------------------------------------------------
 def _workspace_host(client: Any | None) -> str:
-    """Return the workspace host URL (no trailing slash)."""
+    """Return the workspace host URL (no trailing slash).
+
+    Order: DATABRICKS_HOST env → passed client's config → a freshly created
+    WorkspaceClient's config (ambient auth inside notebooks/Jobs, where the env
+    var is not set but the SDK still resolves the host).
+    """
     host = os.environ.get("DATABRICKS_HOST", "").rstrip("/")
     if host:
         return host
@@ -224,6 +229,14 @@ def _workspace_host(client: Any | None) -> str:
         cfg = getattr(client, "config", None)
         if cfg is not None and getattr(cfg, "host", None):
             return str(cfg.host).rstrip("/")
+    try:  # pragma: no cover - platform-only: resolve host from ambient SDK auth
+        from databricks.sdk import WorkspaceClient
+
+        cfg = WorkspaceClient().config
+        if getattr(cfg, "host", None):
+            return str(cfg.host).rstrip("/")
+    except Exception:  # noqa: BLE001
+        pass
     raise RuntimeError(
         "Workspace host is unknown. Inside a Databricks notebook this is "
         "ambient; elsewhere set DATABRICKS_HOST."
