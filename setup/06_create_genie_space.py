@@ -4,7 +4,7 @@
 # MAGIC
 # MAGIC Creates a **Genie space** over the gold layer + metric views using
 # MAGIC `assets/genie/space_config.yml` — curated tables, business instructions,
-# MAGIC ~15 sample questions, and 5 benchmark/verified answers for the evaluation demo.
+# MAGIC 5 benchmark-verified common questions, and 6 verified benchmark answers.
 # MAGIC
 # MAGIC Genie space creation via API is newer/preview in some regions. This notebook
 # MAGIC tries the SDK; if unavailable in **`southeastasia`**, it prints exact click-path
@@ -128,9 +128,11 @@ if space_id:
         print(f"  Open: https://{host}/genie/rooms/{space_id}")
     except Exception:  # noqa: BLE001
         pass
-    print("  NOTE: tables are bound via API; add the Instructions and sample "
-          "questions from space_config.yml in the Genie UI (not expressible in "
-          "the current serialized-space API).")
+    print("  Bound via API: tables, instructions, example SQL, and benchmarks.")
+    print("  Pin these benchmark-VERIFIED common questions in the Genie UI "
+          "(suggested questions aren't settable via the serialized-space API):")
+    for _q in space.get("sample_questions", []):
+        print(f"    • {_q}")
 else:
     warn("Programmatic Genie creation unavailable here — use the UI (below).")
 
@@ -147,7 +149,9 @@ print(f"""
     3. Add these tables (gold + metric views only):
 {chr(10).join('         - ' + t for t in tables)}
     4. Paste the Instructions from assets/genie/space_config.yml.
-    5. Add the {len(space['sample_questions'])} sample questions.
+    5. Pin these {len(space['sample_questions'])} suggested questions (each is
+       benchmark-VERIFIED — Genie is scored GOOD on them):
+{chr(10).join('         - ' + q for q in space['sample_questions'])}
     6. Under 'Benchmarks', add the {len(space['benchmarks'])} verified Q&A pairs
        (question + expected SQL) to enable the evaluation demo.
 

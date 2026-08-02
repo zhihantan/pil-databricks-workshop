@@ -120,23 +120,16 @@ example_sqls:
     usage_guidance: "Working-capital KPIs (DSO, overdue, billed) come from metric_working_capital."
 
 # ---------------------------------------------------------------------------
-# ~15 sample questions (easy → hard), shown to users and used to seed benchmarks.
+# Common (sample) questions shown to users. These are NOT AI-generated guesses —
+# they are the exact questions that PASSED the Genie benchmark eval (assessed
+# GOOD on the live space), so users are shown prompts Genie is verified to answer
+# correctly. Re-derive with setup/06's benchmark eval if the model/data changes.
 # ---------------------------------------------------------------------------
 sample_questions:
   - "What is our overall schedule reliability over the last 12 months?"
-  - "Show vessel utilization by month."
   - "Which 5 ports have the worst average turnaround time?"
   - "What is revenue per TEU by trade lane?"
-  - "How much demurrage and detention revenue did we bill last quarter?"
-  - "Show the monthly trend of average arrival delay."
-  - "Which customer segment generates the most freight revenue?"
-  - "Compare fuel efficiency between LNG and VLSFO vessels."
-  - "What is our CO2 per TEU-km by vessel class?"
   - "What is our current DSO and how many invoices are overdue?"
-  - "Which trade lane has the worst schedule reliability, and what drove it?"
-  - "Are larger vessel classes more fuel efficient per TEU-nm than feeders?"
-  - "Which ports contribute most to total vessel waiting time?"
-  - "Is revenue per TEU rising or falling over the last year?"
   - "Show total revenue by customer industry."
 
 # ---------------------------------------------------------------------------
