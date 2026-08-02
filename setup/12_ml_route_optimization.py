@@ -39,7 +39,7 @@ _add_repo_src_to_path()
 
 # COMMAND ----------
 
-# MAGIC %pip install "ortools==9.11.4210" "protobuf<6" "numpy<2" "pandas<2.3"
+# MAGIC %pip install "ortools==9.11.4210" "numpy==1.26.4" "pandas==1.5.3" "protobuf==5.29.4"
 
 # COMMAND ----------
 
