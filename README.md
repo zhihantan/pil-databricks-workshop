@@ -64,8 +64,11 @@ brainstorm, and design assumptions.
 1. **Clone** this repo into Databricks: *Workspace → Repos → Add Repo* (or Git
    Folders), pointing at your fork.
 2. **Open** `setup/00_setup_all.py`.
-3. **Run all** — it runs the preflight checks then phases 1–5 (set `scale=demo`
-   for a fast first run). It prints every created asset with its URL.
+3. **Run all** — after the preflight checks it creates a **daily Databricks Job**
+   (one task per notebook 01–12, serverless, scheduled) and triggers a run; watch
+   it under **Workflows**. It prints the Job URL and every created asset. (Prefer
+   an in-session run? Set the `orchestration` widget to `inline`. Choose
+   `scale=demo` for a fast first run.)
 4. **Explore Part 1**: open the **PIL Operations** dashboard and the **Genie**
    space; try the Genie Code lab in [`genie_code/`](genie_code/).
 5. **Deploy Part 2**: build the app frontend (`cd app/frontend && npm install &&

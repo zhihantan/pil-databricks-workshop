@@ -149,9 +149,37 @@ leg) before reaching for a full NLP solver.
 
 ---
 
+## Orchestration — the daily Databricks Job
+
+By default `00_setup_all` (`orchestration=job`) provisions a real, schedulable
+**Databricks Job / Workflow** via `src/pil_workshop/job_builder.py`:
+
+- **One task per setup notebook** (01–12) wired into a dependency DAG — e.g.
+  `01 → 02 → 03 → 04 → {05, 06}` and the app chain `07 → 08 → 09 → 10`, with the
+  ML tasks (`11`, `12`) fanning out after silver. `max_concurrent_runs=1`.
+- **Serverless** notebook tasks sharing one environment (`environment_version 3`,
+  deps `PyYAML` + `openai`); notebooks 07/11/12 add their own heavy deps via a
+  pinned `%pip` (ortools uses `--no-deps` to avoid clobbering the runtime's
+  numpy/pandas).
+- A **daily `CronSchedule`** (default `0 0 3 * * ?` Asia/Singapore) so the whole
+  workshop refreshes every morning.
+- **Create-or-update by name** (`jobs.reset`), so re-running `00_setup_all` never
+  creates duplicate Jobs.
+
+An `orchestration=inline` widget keeps the original in-session
+`dbutils.notebook.run` path for quick single runs.
+
+> This pipeline was validated end-to-end on a live serverless workspace: a fresh
+> `run_now` completes with all 13 tasks green, and every asset below is created
+> (verified: 17 silver tables, 4 MVs, 9 metric views, 3 usage views, the
+> dashboard, Genie space, invoice extractions + exceptions, container inspections
+> with a real damage-classification accuracy, Lakebase queue, demand forecasts,
+> and the repositioning plan). Live-run fixes are logged in `docs/code_review.md`.
+
 ## Idempotency & teardown
 
 Every notebook uses `CREATE ... IF NOT EXISTS` / `CREATE OR REPLACE`, so
-re-running `00_setup_all` is a no-op-safe operation. `99_teardown` removes all
-assets (catalog, dashboard, Genie space, app, Lakebase instance) with confirm
-guards. See `docs/troubleshooting.md` for recovery playbooks.
+re-running `00_setup_all` (or the Job) is a no-op-safe operation. `99_teardown`
+removes all assets (catalog, dashboard, Genie space, app, Lakebase instance, and
+the ML serving endpoint) with confirm guards. See `docs/troubleshooting.md` for
+recovery playbooks.
