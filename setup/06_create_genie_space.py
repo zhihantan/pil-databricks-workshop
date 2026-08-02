@@ -91,12 +91,15 @@ else:
 # creating duplicates on every run.
 space_id = None
 try:
-    for s in wc.genie.list_spaces():
+    _resp = wc.genie.list_spaces()
+    # SDK returns a response object with a `.spaces` list (not directly iterable).
+    _spaces = getattr(_resp, "spaces", None) or _resp
+    for s in _spaces:
         if getattr(s, "title", None) == space["title"]:
             space_id = getattr(s, "space_id", None)
             break
-except Exception:  # noqa: BLE001
-    pass
+except Exception as exc:  # noqa: BLE001
+    warn(f"Could not list existing Genie spaces (will create new): {exc}")
 
 if space_id:
     ok(f"Genie space already exists (id={space_id}); reusing.")
