@@ -137,15 +137,33 @@ try:
     # unreliable on the FUSE mount in some serverless contexts.
     img_files = [f.name for f in dbutils.fs.ls(IMAGE_PATH) if f.name.endswith(".png")]
     print(f"  Found {len(img_files)} images under {IMAGE_PATH}")
-    rows = agent_bricks.classify_container_images(IMAGE_LOCAL, endpoints.vision, llm)
+    rows = agent_bricks.classify_container_images(
+        IMAGE_LOCAL, endpoints.vision, llm, file_names=img_files
+    )
     if not rows:
         raise RuntimeError(
             f"No inspection rows produced (found {len(img_files)} image files at "
             f"{IMAGE_LOCAL}). Check Volume readability and the vision endpoint "
             f"'{endpoints.vision}'."
         )
+    # Use an explicit schema: inference fails ([CANNOT_DETERMINE_TYPE]) when a
+    # column is None across all rows (e.g. a null confidence from the model).
+    inspection_schema = (
+        "file_name STRING, damage STRING, damage_type STRING, "
+        "confidence DOUBLE, recommended_action STRING"
+    )
+    norm_rows = [
+        {
+            "file_name": r.get("file_name"),
+            "damage": r.get("damage"),
+            "damage_type": r.get("damage_type"),
+            "confidence": float(r["confidence"]) if r.get("confidence") is not None else None,
+            "recommended_action": r.get("recommended_action"),
+        }
+        for r in rows
+    ]
     (
-        spark.createDataFrame(rows)
+        spark.createDataFrame(norm_rows, schema=inspection_schema)
         .write.format("delta").mode("overwrite")
         .option("overwriteSchema", "true")
         .saveAsTable(f"`{CATALOG}`.`silver`.`container_inspections`")
@@ -163,22 +181,9 @@ try:
         .orderBy("gt_damage", "pred_damage")
     )
 except Exception as exc:  # noqa: BLE001
-    import traceback as _tb
-    _trace = _tb.format_exc()
     warn(f"Vision pipeline failed: {exc}")
     print("  Ensure a multimodal FMAPI endpoint is available in-region "
           f"(chosen: {endpoints.vision}).")
-    # Persist the traceback to a UC table so it is inspectable off-platform
-    # (serverless notebook stdout is not returned by the Jobs run-output API).
-    try:
-        spark.createDataFrame(
-            [(endpoints.vision, str(exc)[:500], _trace[:4000])],
-            "endpoint STRING, error STRING, trace STRING",
-        ).write.format("delta").mode("overwrite").option(
-            "overwriteSchema", "true"
-        ).saveAsTable(f"`{CATALOG}`.`silver`.`_vision_debug`")
-    except Exception:  # noqa: BLE001
-        pass
 
 # COMMAND ----------
 

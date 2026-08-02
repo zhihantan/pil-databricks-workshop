@@ -253,6 +253,7 @@ def classify_container_images(
     llm_module: Any,
     *,
     limit: int | None = None,
+    file_names: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Classify every ``*.png`` in ``image_dir`` via the governed vision endpoint.
 
@@ -260,13 +261,21 @@ def classify_container_images(
     ``/Volumes/<cat>/bronze/container_images``). Returns one dict per image with
     the parsed inspection fields (``file_name`` + INSPECTION_SCHEMA keys),
     tolerant of a model response that isn't clean JSON.
+
+    ``file_names`` optionally provides the list of image file names to read
+    (e.g. from ``dbutils.fs.ls``); this avoids ``glob`` on the Volume FUSE mount,
+    which is unreliable on serverless. When omitted, falls back to globbing.
     """
     import base64
-    import glob
     import json as _json
     import os
 
-    files = sorted(glob.glob(os.path.join(image_dir, "*.png")))
+    if file_names is not None:
+        files = [os.path.join(image_dir, n) for n in sorted(file_names)
+                 if n.endswith(".png")]
+    else:
+        import glob
+        files = sorted(glob.glob(os.path.join(image_dir, "*.png")))
     if limit:
         files = files[:limit]
     rows: list[dict[str, Any]] = []
