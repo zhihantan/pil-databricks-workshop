@@ -218,20 +218,24 @@ FROM imgs
 
 
 def build_vision_scored_sql(catalog: str) -> str:
-    """Return SQL joining inspections to labels and computing correctness."""
+    """Return SQL joining inspections to labels and computing correctness.
+
+    ``container_inspections`` is written by ``classify_container_images`` with
+    already-parsed columns (damage/damage_type/confidence/recommended_action),
+    so this reads them directly (no JSON extraction).
+    """
     return f"""
 CREATE OR REPLACE TABLE `{catalog}`.`silver`.`container_inspections_scored` AS
 SELECT
     i.file_name,
     l.container_no,
-    get_json_object(i.inspection_json, '$.damage')            AS pred_damage,
-    get_json_object(i.inspection_json, '$.damage_type')       AS pred_damage_type,
-    CAST(get_json_object(i.inspection_json, '$.confidence') AS DOUBLE) AS confidence,
-    get_json_object(i.inspection_json, '$.recommended_action') AS recommended_action,
+    i.damage              AS pred_damage,
+    i.damage_type         AS pred_damage_type,
+    i.confidence          AS confidence,
+    i.recommended_action  AS recommended_action,
     l.gt_damage,
     l.gt_damage_type,
-    CASE WHEN get_json_object(i.inspection_json, '$.damage') = l.gt_damage
-         THEN 1 ELSE 0 END AS is_correct
+    CASE WHEN i.damage = l.gt_damage THEN 1 ELSE 0 END AS is_correct
 FROM `{catalog}`.`silver`.`container_inspections` i
 JOIN `{catalog}`.`silver`.`container_image_labels` l
   ON i.file_name = l.file_name
@@ -309,7 +313,8 @@ def classify_container_images(
             parsed = _json.loads(raw)
             row.update({k: parsed.get(k) for k in
                         ("damage", "damage_type", "confidence", "recommended_action")})
-        except Exception:  # noqa: BLE001 - keep a row even if one image fails
+        except Exception as _exc:  # noqa: BLE001 - keep a row even if one fails
             row["damage"] = "unknown"
+            row["recommended_action"] = f"ERROR: {type(_exc).__name__}: {str(_exc)[:200]}"
         rows.append(row)
     return rows
