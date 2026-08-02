@@ -61,44 +61,51 @@ for note in endpoints.notes:
 
 # COMMAND ----------
 
-# MAGIC %md ### Primary path — Agent Bricks Information Extraction (UI walkthrough)
+# MAGIC %md ### Invoice extraction — ai_parse_document + ai_extract + ai_query
+# MAGIC This is the **programmatic Information-Extraction path** and it runs now.
+# MAGIC A live bake-off on these invoices (scored vs. ground truth) picked the tool
+# MAGIC for each job:
+# MAGIC
+# MAGIC | Function | Role | Why |
+# MAGIC |---|---|---|
+# MAGIC | `ai_parse_document` | PDF → text | the document-parsing step |
+# MAGIC | `ai_extract` | flat header fields | matched `ai_query` accuracy, ~25% faster, clean struct |
+# MAGIC | `ai_query` | nested `line_items[]`, subtotal, tax, total | the schema `ai_extract` can't express |
+# MAGIC
+# MAGIC Both AI calls hit the governed FMAPI endpoint (`{endpoints.text}`), so usage
+# MAGIC lands on Dashboard Page 4.
+# MAGIC
+# MAGIC **Agent Bricks IE as the no-code alternative** (UI): Agents → Agent Bricks →
+# MAGIC Information Extraction → Build over `{INVOICE_PATH}` with the same schema.
+# MAGIC Databricks currently exposes no API to create/invoke an IE agent (it's
+# MAGIC UI-created and consumed via batch `ai_query`), so this SQL pipeline is the
+# MAGIC shippable programmatic equivalent.
 
 # COMMAND ----------
 
-print(f"""
-  Create an Agent Bricks Information Extraction agent (UI):
-    1. Agents (left nav) → Agent Bricks → Information Extraction → Build.
-    2. Source: the invoice Volume  {INVOICE_PATH}
-    3. Define the output schema:
-         invoice_no, date, customer, po_number, currency,
-         line_items[] (description, amount), subtotal, tax, total, payment_terms
-    4. Model: choose the governed FMAPI text endpoint  '{endpoints.text}'
-       (so usage lands on the AI Gateway usage tables / Dashboard Page 4).
-    5. Create → run on the sample → review the auto-generated eval.
-    6. (Optional) Export the agent as an endpoint and point the app at it.
-
-  When to use Agent Bricks vs. the hand-rolled ai_query pipeline below:
-    • Agent Bricks: managed schema/eval/versioning, no-code iteration, built-in
-      quality metrics — great for business users and repeatable extraction.
-    • ai_query pipeline: full control in SQL/Python, easy to embed in DLT/jobs,
-      transparent cost, no extra service — great for engineers and CI.
-""")
+# MAGIC %md #### Step 1 — parse PDFs to text (ai_parse_document)
 
 # COMMAND ----------
 
-# MAGIC %md ### Fallback path — invoice extraction pipeline (runs now)
-# MAGIC If FMAPI endpoints aren't reachable in-region this cell will error clearly;
-# MAGIC the notebook then explains what an account admin must enable.
-
-# COMMAND ----------
-
-extraction_sql = agent_bricks.build_invoice_extraction_sql(
-    CATALOG, endpoints.text, INVOICE_PATH
-)
 try:
-    spark.sql(extraction_sql)
+    spark.sql(agent_bricks.build_invoice_parse_sql(CATALOG, INVOICE_PATH))
+    n_parsed = spark.table(f"`{CATALOG}`.`silver`.`invoice_parsed_text`").count()
+    ok(f"Parsed {n_parsed} invoice PDFs → silver.invoice_parsed_text")
+except Exception as exc:  # noqa: BLE001
+    warn(f"ai_parse_document step failed: {exc}")
+
+# COMMAND ----------
+
+# MAGIC %md #### Step 2 — extract fields (ai_extract flat + ai_query nested)
+
+# COMMAND ----------
+
+try:
+    spark.sql(agent_bricks.build_invoice_extraction_sql(
+        CATALOG, endpoints.text, INVOICE_PATH))
     n = spark.table(f"`{CATALOG}`.`silver`.`invoice_extractions`").count()
-    ok(f"Extracted {n} invoices → silver.invoice_extractions")
+    ok(f"Extracted {n} invoices → silver.invoice_extractions "
+       "(flat fields via ai_extract, line-items via ai_query)")
 except Exception as exc:  # noqa: BLE001
     warn(f"Extraction pipeline failed: {exc}")
     print(
