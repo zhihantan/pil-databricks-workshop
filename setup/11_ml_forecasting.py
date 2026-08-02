@@ -41,7 +41,7 @@ _add_repo_src_to_path()
 
 # COMMAND ----------
 
-# MAGIC %pip install lightgbm mlflow
+# MAGIC %pip install "lightgbm==4.5.0" "numpy<2" "pandas<2.3"
 
 # COMMAND ----------
 

@@ -47,7 +47,7 @@ _add_repo_src_to_path()
 
 # COMMAND ----------
 
-# MAGIC %pip install reportlab Pillow
+# MAGIC %pip install "reportlab>=4.1,<5" "Pillow>=10.3"
 
 # COMMAND ----------
 
