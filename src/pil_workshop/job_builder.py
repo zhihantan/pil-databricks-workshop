@@ -27,9 +27,11 @@ DEFAULT_CRON = "0 0 3 * * ?"
 
 # Serverless notebook tasks share one environment; a few notebooks %pip-install
 # their own heavy deps (reportlab/Pillow/lightgbm/ortools), so the base env is
-# intentionally light. PyYAML is needed by 06 at import time.
+# intentionally light. PyYAML is needed by 06 at import time; openai is the
+# OpenAI-compatible client used by 08's governed vision path (llm.chat) and is
+# not preinstalled on serverless.
 ENVIRONMENT_KEY = "pil_env"
-ENVIRONMENT_DEPS = ["PyYAML"]
+ENVIRONMENT_DEPS = ["PyYAML", "openai"]
 
 
 @dataclass(frozen=True)
