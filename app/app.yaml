@@ -18,17 +18,21 @@ env:
   # Catalog the app reads analytics from (override per deployment).
   - name: PIL_CATALOG
     value: "pil_workshop"
-  # Serverless SQL warehouse the app runs Unity Catalog reads + invoice
-  # extraction against. Without this the SQL connector can't connect and the
-  # app falls back to demo KPIs / extraction fails. Override per deployment.
-  - name: PIL_WAREHOUSE_ID
-    value: "01427ef1c429a676"
   # Lakebase instance name; app mints its own credential via the SDK.
   - name: PIL_LAKEBASE_INSTANCE
     value: "pil-workshop-db"
-  # Endpoint overrides are optional — llm.py auto-discovers otherwise.
+  # ---- Optional overrides (nothing below is hardcoded) --------------------
+  # The app auto-discovers whichever resources its service principal can
+  # access, so a fresh clone works with no edits:
+  #   * SQL warehouse — clients.resolve_warehouse_id() picks the best
+  #     serverless/RUNNING warehouse the SP can see. Set PIL_WAREHOUSE_ID only
+  #     to pin a specific one.
+  #   * FMAPI endpoints — llm.resolve_endpoints() picks the best served
+  #     text/vision model. Set PIL_TEXT_ENDPOINT / PIL_VISION_ENDPOINT to pin.
+  # - name: PIL_WAREHOUSE_ID
+  #   value: "0123456789abcdef"
   # - name: PIL_TEXT_ENDPOINT
-  #   value: "databricks-claude-sonnet-4"
+  #   value: "databricks-claude-sonnet-4-5"
 
 # ---------------------------------------------------------------------------
 # Resources the app's service principal needs access to. Grant these when

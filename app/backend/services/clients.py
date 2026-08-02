@@ -62,12 +62,66 @@ def _bearer_token(wc: Any) -> str | None:
     return None
 
 
+def _pick_warehouse(warehouses: list[Any]) -> str | None:
+    """Choose the best usable warehouse from a list of SDK warehouse objects.
+
+    Preference (high→low): serverless + RUNNING, serverless (any state), any
+    RUNNING, any warehouse. Serverless is preferred because the ``ai_*`` SQL
+    functions the extraction uses need serverless/pro compute, and RUNNING
+    avoids a cold start. ``sorted`` is stable, so ties keep workspace order.
+    """
+    def is_serverless(w: Any) -> bool:
+        return bool(getattr(w, "enable_serverless_compute", False))
+
+    def is_running(w: Any) -> bool:
+        state = getattr(w, "state", None)
+        return str(getattr(state, "value", state)).upper() == "RUNNING"
+
+    ranked = sorted(warehouses, key=lambda w: (is_serverless(w), is_running(w)), reverse=True)
+    for w in ranked:
+        wid = getattr(w, "id", None)
+        if wid:
+            return wid
+    return None
+
+
+@lru_cache
+def resolve_warehouse_id() -> str | None:
+    """Resolve the SQL warehouse for UC reads + invoice extraction (cached).
+
+    Nothing is hardcoded so a customer who pulls the repo gets whichever
+    warehouse their principal can access:
+
+      1. ``PIL_WAREHOUSE_ID`` env override, if set (explicit control);
+      2. else auto-discover via the SDK and pick the best warehouse the app's
+         service principal can see (see ``_pick_warehouse``);
+      3. else ``None`` — the app degrades to demo KPIs and extraction returns a
+         clear "no warehouse" error rather than a silent failure.
+    """
+    settings = get_settings()
+    if settings.warehouse_id:
+        return settings.warehouse_id
+    wc = workspace_client()
+    if wc is None:
+        return None
+    try:
+        chosen = _pick_warehouse(list(wc.warehouses.list()))
+    except Exception as exc:  # noqa: BLE001
+        LOG.warning("Could not list SQL warehouses for auto-discovery: %s", exc)
+        return None
+    if chosen:
+        LOG.info("Auto-discovered SQL warehouse %s (set PIL_WAREHOUSE_ID to pin).", chosen)
+    else:
+        LOG.warning("No SQL warehouse discovered; app will use demo data only.")
+    return chosen
+
+
 @lru_cache
 def sql_connection_params() -> tuple[str, str, str] | None:
     """Return (host, http_path, token) for the SQL connector, or None."""
-    settings = get_settings()
     wc = workspace_client()
-    if wc is None or not settings.warehouse_id:
+    warehouse_id = resolve_warehouse_id()
+    if wc is None or not warehouse_id:
         return None
     try:
         host = wc.config.host
@@ -75,7 +129,7 @@ def sql_connection_params() -> tuple[str, str, str] | None:
         if not token:
             LOG.warning("No bearer token available for SQL connector.")
             return None
-        http_path = f"/sql/1.0/warehouses/{settings.warehouse_id}"
+        http_path = f"/sql/1.0/warehouses/{warehouse_id}"
         return host, http_path, token
     except Exception as exc:  # noqa: BLE001
         LOG.warning("SQL connection params unavailable: %s", exc)
