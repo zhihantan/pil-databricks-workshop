@@ -8,6 +8,7 @@ from __future__ import annotations
 from backend.services.analytics_service import AnalyticsService
 from backend.services.clients import (
     lakebase_connection,
+    sql_execute,
     sql_query,
     sql_query_strict,
     workspace_client,
@@ -24,9 +25,11 @@ def get_invoice_service() -> InvoiceService:
 def get_extraction_service() -> ExtractionService:
     # Strict SQL: extraction must surface real errors, not silently return [].
     # The FMAPI endpoint lives in the governed UC function, not here.
+    # write_fn persists each extraction to the Delta sink (best-effort).
     return ExtractionService(
         workspace_client=workspace_client(),
         sql_fn=sql_query_strict,
+        write_fn=sql_execute,
     )
 
 

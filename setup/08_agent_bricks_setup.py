@@ -130,6 +130,36 @@ except Exception as exc:  # noqa: BLE001
 
 # COMMAND ----------
 
+# MAGIC %md #### Step 1c — create the app's invoice-extraction Delta sink
+# MAGIC The app persists each uploaded invoice's extraction here (one Delta row:
+# MAGIC typed fields + `line_items_json` + `raw_json`), so a JSON extraction
+# MAGIC becomes queryable in SQL/Genie. The app writes via a parameterized INSERT,
+# MAGIC so its service principal needs MODIFY + SELECT on the table.
+
+# COMMAND ----------
+
+try:
+    spark.sql(agent_bricks.build_invoice_uploads_ddl(CATALOG))
+    tbl = agent_bricks.invoice_uploads_table(CATALOG)
+    ok(f"Ensured Delta sink {tbl}.")
+    try:
+        app_sp = dbx_api.app_service_principal_id(config.APP_NAME, client=wc)
+        if app_sp:
+            for priv in ("MODIFY", "SELECT"):
+                spark.sql(f"GRANT {priv} ON TABLE {tbl} TO `{app_sp}`")
+            # USE SCHEMA on apps so the SP can resolve the table.
+            spark.sql(f"GRANT USE SCHEMA ON SCHEMA `{CATALOG}`.`apps` TO `{app_sp}`")
+            ok(f"Granted MODIFY+SELECT on {tbl} to app SP {app_sp}.")
+        else:
+            warn("App SP not resolvable yet — grant MODIFY+SELECT after deploy "
+                 "(the daily run does this automatically).")
+    except Exception as gexc:  # noqa: BLE001
+        warn(f"Could not grant table access to the app SP (do it after deploy): {gexc}")
+except Exception as exc:  # noqa: BLE001
+    warn(f"Could not create the invoice-extraction Delta sink: {exc}")
+
+# COMMAND ----------
+
 # MAGIC %md #### Step 2 — extract fields (ai_extract flat + ai_query nested)
 
 # COMMAND ----------

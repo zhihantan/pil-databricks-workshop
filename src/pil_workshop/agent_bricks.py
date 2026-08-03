@@ -145,6 +145,82 @@ def invoice_function_name(catalog: str) -> str:
     return f"`{catalog}`.{INVOICE_EXTRACT_FUNCTION}"
 
 
+# ---------------------------------------------------------------------------
+# Delta sink for app-uploaded invoice extractions.
+#
+# The app writes each extraction here (parameterized INSERT via the SQL
+# connector) so a JSON extraction becomes a queryable Delta row. Typed columns
+# for the fields you'd filter/aggregate on; arrays/nested kept as-is
+# (container_numbers as ARRAY, line_items + raw_json as JSON strings) so nothing
+# is lost. INVOICE_UPLOAD_COLUMNS is the single source of truth shared by the
+# DDL and the INSERT so they never drift.
+# ---------------------------------------------------------------------------
+INVOICE_UPLOADS_TABLE = "apps.invoice_extractions_app"
+
+# (column_name, sql_type) in insert order. extracted_at is defaulted, not passed.
+INVOICE_UPLOAD_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("source_file", "STRING"),
+    ("volume_path", "STRING"),
+    ("invoice_no", "STRING"),
+    ("invoice_date", "STRING"),
+    ("due_date", "STRING"),
+    ("purchase_order", "STRING"),
+    ("vendor_name", "STRING"),
+    ("vendor_tax_id", "STRING"),
+    ("vendor_address", "STRING"),
+    ("customer_name", "STRING"),
+    ("customer_address", "STRING"),
+    ("currency", "STRING"),
+    ("incoterms", "STRING"),
+    ("bill_of_lading", "STRING"),
+    ("vessel_name", "STRING"),
+    ("container_numbers", "ARRAY<STRING>"),
+    ("port_of_loading", "STRING"),
+    ("port_of_discharge", "STRING"),
+    ("payment_terms", "STRING"),
+    ("bank_details", "STRING"),
+    ("notes", "STRING"),
+    ("subtotal", "DOUBLE"),
+    ("discount", "DOUBLE"),
+    ("shipping", "DOUBLE"),
+    ("tax", "DOUBLE"),
+    ("tax_rate", "STRING"),
+    ("total", "DOUBLE"),
+    ("amount_paid", "DOUBLE"),
+    ("balance_due", "DOUBLE"),
+    ("line_items_json", "STRING"),
+    ("exception_type", "STRING"),
+    ("model_endpoint", "STRING"),
+    ("est_total_tokens", "BIGINT"),
+    ("raw_json", "STRING"),
+)
+
+
+def invoice_uploads_table(catalog: str) -> str:
+    """Fully-qualified name of the app's invoice-extraction Delta sink."""
+    return f"`{catalog}`.`apps`.`invoice_extractions_app`"
+
+
+def build_invoice_uploads_ddl(catalog: str) -> str:
+    """Return CREATE TABLE IF NOT EXISTS for the app's invoice extraction sink.
+
+    ``extracted_at`` defaults to the write time (Delta column defaults) so the
+    app never has to pass a timestamp. All other columns come from
+    ``INVOICE_UPLOAD_COLUMNS`` so the DDL and the INSERT stay in lockstep.
+    """
+    cols = ",\n    ".join(f"`{name}` {sqltype}" for name, sqltype in INVOICE_UPLOAD_COLUMNS)
+    return f"""
+CREATE TABLE IF NOT EXISTS {invoice_uploads_table(catalog)} (
+    `extracted_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
+    {cols}
+)
+USING DELTA
+COMMENT 'Structured invoice extractions written by the PIL app upload flow — '
+        'one row per uploaded PDF (typed fields + line_items_json + raw_json).'
+TBLPROPERTIES ('delta.feature.allowColumnDefaults' = 'supported')
+""".strip()
+
+
 def build_invoice_extraction_function_ddl(catalog: str, text_endpoint: str) -> str:
     """Return DDL for the governed invoice-extraction UC function.
 

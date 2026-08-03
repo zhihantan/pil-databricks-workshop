@@ -138,8 +138,17 @@ def sql_connection_target() -> tuple[str, str] | None:
         return None
 
 
-def _run_sql(sql: str) -> list[dict[str, Any]]:
+def _run_sql(
+    sql: str,
+    params: dict[str, Any] | None = None,
+    *,
+    fetch: bool = True,
+) -> list[dict[str, Any]]:
     """Execute SQL via the Databricks SQL connector; raise on any failure.
+
+    ``params`` uses the connector's native named style (``:name``) — the safe
+    way to write arbitrary extracted text (no manual escaping / injection).
+    ``fetch=False`` for statements with no result set (INSERT/DDL).
 
     The access token is resolved FRESH on every call — never cached. The app's
     OAuth (oauth-m2m) service-principal token is short-lived (~1h); a cached
@@ -164,9 +173,16 @@ def _run_sql(sql: str) -> list[dict[str, Any]]:
         http_path=http_path,
         access_token=token,
     ) as conn, conn.cursor() as cur:
-        cur.execute(sql)
+        cur.execute(sql, params or None)
+        if not fetch or cur.description is None:
+            return []
         cols = [c[0] for c in cur.description]
         return [dict(zip(cols, row, strict=False)) for row in cur.fetchall()]
+
+
+def sql_execute(sql: str, params: dict[str, Any] | None = None) -> None:
+    """Run a write/DDL statement (parameterized). Raises on failure."""
+    _run_sql(sql, params, fetch=False)
 
 
 def sql_query(sql: str) -> list[dict[str, Any]]:

@@ -301,9 +301,22 @@ function RichResult({ r }: { r: ExtractedInvoice }) {
               <F l="Notes" v={r.notes} />
             </FieldGroup>
           )}
-          <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-            Saved to <code>{r.volume_path}</code>
-          </p>
+          <div className="save-status">
+            <p className="muted" style={{ margin: 0, fontSize: 12 }}>
+              📄 PDF saved to <code>{r.volume_path}</code>
+            </p>
+            {r.saved_table ? (
+              <p className="muted" style={{ margin: "4px 0 0", fontSize: 12 }}>
+                <span className="save-ok">✓ Delta</span> row written to{" "}
+                <code>{r.saved_table.replace(/`/g, "")}</code>
+              </p>
+            ) : (
+              <p className="muted" style={{ margin: "4px 0 0", fontSize: 12 }}>
+                <span className="save-warn">⚠</span> Not persisted to Delta (extraction
+                still returned).
+              </p>
+            )}
+          </div>
         </div>
       </div>
 

@@ -27,17 +27,20 @@ _VOLUME_SUBPATH = "bronze/raw_invoices"
 class ExtractionService:
     """Save an uploaded invoice to the Volume and extract structured data.
 
-    ``workspace_client`` / ``sql_fn`` are injected so the service is
-    unit-testable with fakes.
+    ``workspace_client`` / ``sql_fn`` / ``write_fn`` are injected so the service
+    is unit-testable with fakes. ``write_fn`` persists the extraction to Delta;
+    when ``None`` the persist step is skipped (the extraction still returns).
     """
 
     def __init__(
         self,
         workspace_client: Any = None,
         sql_fn: Any = None,
+        write_fn: Any = None,
     ) -> None:
         self._wc = workspace_client
         self._sql_fn = sql_fn
+        self._write_fn = write_fn
 
     # ---- volume path helpers --------------------------------------------
     def _volume_path(self, file_name: str) -> str:
@@ -214,9 +217,79 @@ class ExtractionService:
             "metrics": {"model_endpoint": _model_endpoint(), **metrics},
         }
 
+    # ---- 4. persist to Delta --------------------------------------------
+    def _persist(self, result: dict[str, Any]) -> str | None:
+        """Write one extraction row to the Delta sink; return the table or None.
+
+        Best-effort: a write failure never fails the extraction response (the
+        structured data is already computed). Uses a parameterized INSERT so
+        arbitrary extracted text is safe; the array column is passed as a JSON
+        string and parsed with ``from_json`` in SQL.
+        """
+        if not self._write_fn:
+            return None
+        from pil_workshop.agent_bricks import (
+            INVOICE_UPLOAD_COLUMNS,
+            invoice_uploads_table,
+        )
+
+        table = invoice_uploads_table(get_settings().catalog)
+        # Map the assembled result to each column (result key = column, with a
+        # few renames handled here).
+        values = {
+            "source_file": result.get("file_name"),
+            "volume_path": result.get("volume_path"),
+            "invoice_no": result.get("invoice_no"),
+            "invoice_date": result.get("invoice_date"),
+            "due_date": result.get("due_date"),
+            "purchase_order": result.get("purchase_order"),
+            "vendor_name": result.get("vendor_name"),
+            "vendor_tax_id": result.get("vendor_tax_id"),
+            "vendor_address": result.get("vendor_address"),
+            "customer_name": result.get("customer_name"),
+            "customer_address": result.get("customer_address"),
+            "currency": result.get("currency"),
+            "incoterms": result.get("incoterms"),
+            "bill_of_lading": result.get("bill_of_lading"),
+            "vessel_name": result.get("vessel_name"),
+            "container_numbers": json.dumps(result.get("container_numbers") or []),
+            "port_of_loading": result.get("port_of_loading"),
+            "port_of_discharge": result.get("port_of_discharge"),
+            "payment_terms": result.get("payment_terms"),
+            "bank_details": result.get("bank_details"),
+            "notes": result.get("notes"),
+            "subtotal": result.get("subtotal"),
+            "discount": result.get("discount"),
+            "shipping": result.get("shipping"),
+            "tax": result.get("tax"),
+            "tax_rate": result.get("tax_rate"),
+            "total": result.get("total"),
+            "amount_paid": result.get("amount_paid"),
+            "balance_due": result.get("balance_due"),
+            "line_items_json": json.dumps(result.get("line_items") or []),
+            "exception_type": result.get("exception_type"),
+            "model_endpoint": (result.get("metrics") or {}).get("model_endpoint"),
+            "est_total_tokens": (result.get("metrics") or {}).get("est_total_tokens"),
+            "raw_json": json.dumps(result, default=str),
+        }
+        col_names = [c for c, _ in INVOICE_UPLOAD_COLUMNS]
+        # container_numbers is ARRAY<STRING>: bind a JSON string, parse in SQL.
+        placeholders = [
+            "from_json(:container_numbers, 'ARRAY<STRING>')"
+            if c == "container_numbers"
+            else f":{c}"
+            for c in col_names
+        ]
+        sql = (
+            f"INSERT INTO {table} ({', '.join(f'`{c}`' for c in col_names)}) "
+            f"VALUES ({', '.join(placeholders)})"
+        )
+        self._write_fn(sql, {c: values.get(c) for c in col_names})
+        return table
+
     # ---- orchestration ---------------------------------------------------
     def process_upload(self, file_name: str, content: bytes) -> dict[str, Any]:
-        """Full flow: save to Volume → extract → structured output + metrics."""
+        """Full flow: save to Volume → extract → persist to Delta → output."""
         import time
 
         t0 = time.perf_counter()
@@ -227,6 +300,12 @@ class ExtractionService:
         m["save_ms"] = save_ms
         m["duration_ms"] = save_ms + int(m.get("extract_ms") or 0)
         result["metrics"] = m
+        # Persist to Delta (best-effort — never fail the response on a write error).
+        try:
+            result["saved_table"] = self._persist(result)
+        except Exception as exc:  # noqa: BLE001
+            LOG.warning("Persist to Delta failed (extraction still returned): %s", exc)
+            result["saved_table"] = None
         return result
 
 

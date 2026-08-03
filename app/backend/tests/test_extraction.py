@@ -141,3 +141,47 @@ def test_process_upload_saves_then_extracts_with_metrics():
     # duration_ms rolls up save + extract
     m = r["metrics"]
     assert m["duration_ms"] >= m["extract_ms"] and m["save_ms"] >= 0
+
+
+def test_persist_writes_parameterized_insert_row():
+    wc = _FakeWC()
+    captured = {}
+
+    def _write(sql, params):
+        captured["sql"] = sql
+        captured["params"] = params
+
+    flat = {"invoice_no": "INV-9", "currency": "SGD", "total": "4,578.00"}
+    nested = {
+        "invoice_no": "INV-9", "purchase_order": "PO9", "currency": "SGD",
+        "subtotal": 4295.0, "discount": 95.0, "tax": 378.0, "total": 4578.0,
+        "container_numbers": ["PCIU1", "PCIU2"],
+        "line_items": [{"description": "Ocean Freight", "amount": 4295.0}],
+    }
+    svc = ExtractionService(
+        workspace_client=wc, sql_fn=_sql_fn_returning(flat, nested), write_fn=_write
+    )
+    r = svc.process_upload("z.pdf", b"%PDF")
+    assert r["saved_table"].endswith("`invoice_extractions_app`")
+    # write happened, parameterized (no literal values baked into the SQL)
+    sql = captured["sql"]
+    assert sql.startswith("INSERT INTO")
+    assert ":invoice_no" in sql and ":total" in sql
+    # array column parsed from a JSON-string param
+    assert "from_json(:container_numbers, 'ARRAY<STRING>')" in sql
+    p = captured["params"]
+    assert p["invoice_no"] == "INV-9" and p["total"] == 4578.0
+    assert json.loads(p["container_numbers"]) == ["PCIU1", "PCIU2"]
+    assert json.loads(p["line_items_json"])[0]["description"] == "Ocean Freight"
+    # raw_json round-trips the full result
+    assert json.loads(p["raw_json"])["invoice_no"] == "INV-9"
+
+
+def test_persist_skipped_when_no_write_fn():
+    wc = _FakeWC()
+    flat = {"invoice_no": "INV-10", "currency": "USD", "total": "5.00"}
+    nested = {"purchase_order": "PO10", "subtotal": 5.0, "tax": 0.0, "total": 5.0,
+              "line_items": []}
+    svc = ExtractionService(workspace_client=wc, sql_fn=_sql_fn_returning(flat, nested))
+    r = svc.process_upload("y.pdf", b"%PDF")
+    assert r["saved_table"] is None  # no write_fn → persist skipped, still returns

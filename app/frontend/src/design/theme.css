@@ -911,3 +911,18 @@ table.data tr:hover td {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
+
+/* ===== EXTRACTION: save-to-Delta status ========================== */
+.save-status {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+.save-ok {
+  color: var(--pos);
+  font-weight: 700;
+}
+.save-warn {
+  color: var(--warn);
+  font-weight: 700;
+}

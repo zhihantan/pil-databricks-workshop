@@ -72,6 +72,7 @@ class ExtractedInvoice(BaseModel):
     # derived / meta
     exception_type: str | None = None
     metrics: ExtractionMetrics | None = None
+    saved_table: str | None = None  # Delta table the row was persisted to
 
 
 class HealthResponse(BaseModel):

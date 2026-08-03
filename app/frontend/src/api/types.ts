@@ -60,6 +60,7 @@ export interface ExtractedInvoice {
   // derived / meta
   exception_type: string | null;
   metrics: ExtractionMetrics | null;
+  saved_table: string | null;
 }
 
 export interface HealthResponse {
