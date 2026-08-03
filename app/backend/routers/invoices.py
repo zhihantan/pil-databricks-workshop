@@ -9,7 +9,9 @@ from fastapi.responses import FileResponse, Response
 
 from backend.core.auth import current_user_email
 from backend.core.config import get_settings
+from backend.core.logging import get_logger
 from backend.deps import get_extraction_service, get_invoice_service
+from backend.services.clients import workspace_client
 from backend.models.schemas import (
     ExtractedInvoice,
     InvoiceDecisionRequest,
@@ -92,18 +94,37 @@ async def upload_and_extract(
 
 @router.get("/{file_name}/pdf")
 def get_pdf(file_name: str) -> Response:
-    """Return the invoice PDF from the bronze Volume, if reachable."""
+    """Stream an invoice PDF from the bronze Volume for inline preview.
+
+    Databricks Apps run in a container where UC Volumes are NOT filesystem-
+    mounted, so read the bytes via the Files API (the same API the upload flow
+    uses to write). A local filesystem read is tried first for local dev where
+    the Volume may be mounted. Served inline so the browser renders it in-page.
+    """
     settings = get_settings()
-    # Volume path is host-mounted inside Databricks; safe-join the file name.
-    base = f"/Volumes/{settings.catalog}/bronze/raw_invoices"
     safe = os.path.basename(file_name)
-    path = os.path.join(base, safe)
-    if os.path.exists(path):
-        return FileResponse(path, media_type="application/pdf")
+    vol_path = f"/Volumes/{settings.catalog}/bronze/raw_invoices/{safe}"
+    inline = {"Content-Disposition": f'inline; filename="{safe}"'}
+
+    # Fast path: local filesystem (dev, or if the Volume is fuse-mounted).
+    local = os.path.join(f"/Volumes/{settings.catalog}/bronze/raw_invoices", safe)
+    if os.path.exists(local):
+        return FileResponse(local, media_type="application/pdf", headers=inline)
+
+    # Real path in Apps: fetch bytes through the Files API.
+    wc = workspace_client()
+    if wc is not None:
+        try:
+            resp = wc.files.download(vol_path)
+            data = resp.contents.read()
+            return Response(content=data, media_type="application/pdf", headers=inline)
+        except Exception as exc:  # noqa: BLE001
+            get_logger("backend.invoices").info("PDF fetch failed for %s: %s", safe, exc)
+
     raise HTTPException(
         status_code=404,
-        detail=f"PDF not found at {path}. Run notebook 07 to generate invoices, "
-        "and grant the app READ VOLUME on bronze.raw_invoices.",
+        detail=f"PDF not found at {vol_path}. Run notebook 07 to generate "
+        "invoices, and grant the app READ VOLUME on bronze.raw_invoices.",
     )
 
 

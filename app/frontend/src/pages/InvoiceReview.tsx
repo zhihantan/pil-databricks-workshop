@@ -64,9 +64,24 @@ export function InvoiceReview() {
         <div className="split">
           {/* Left: PDF preview */}
           <div className="card">
-            <h2 className="section-title">Document preview</h2>
+            <div className="preview-head">
+              <h2 className="section-title" style={{ margin: 0 }}>
+                Document preview
+              </h2>
+              {active?.pdf_preview_url && (
+                <a
+                  className="btn btn-ghost btn-sm"
+                  href={active.pdf_preview_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  ↗ Open PDF
+                </a>
+              )}
+            </div>
             {active?.pdf_preview_url ? (
               <object
+                key={active.file_name}
                 className="pdf-frame"
                 data={active.pdf_preview_url}
                 type="application/pdf"
@@ -74,8 +89,11 @@ export function InvoiceReview() {
                 <div className="empty">
                   <div className="empty-emoji">📄</div>
                   <p>
-                    Preview unavailable in this environment. File:{" "}
-                    <code>{active.file_name}</code>
+                    Your browser can't render PDFs inline —{" "}
+                    <a href={active.pdf_preview_url} target="_blank" rel="noreferrer">
+                      open {active.file_name}
+                    </a>{" "}
+                    in a new tab.
                   </p>
                 </div>
               </object>

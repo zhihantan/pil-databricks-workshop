@@ -1069,3 +1069,17 @@ table.data tr:hover td {
   font-size: 11px;
   color: var(--muted);
 }
+
+/* ===== REVIEW: preview header + small button ==================== */
+.preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 10px;
+}
+.btn-sm {
+  padding: 4px 12px;
+  font-size: 12px;
+  text-decoration: none;
+}
