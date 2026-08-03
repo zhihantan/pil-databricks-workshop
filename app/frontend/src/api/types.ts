@@ -86,6 +86,8 @@ export interface InvoiceQueueItem {
   file_name: string;
   invoice_no: string | null;
   customer: string | null;
+  po_number: string | null;
+  currency: string | null;
   extracted_total: number | null;
   ground_truth_total: number | null;
   exception_type: string | null;
@@ -99,6 +101,7 @@ export interface InvoiceDecisionRequest {
   decision: Decision;
   reason?: string | null;
   adjusted_total?: number | null;
+  corrections?: Record<string, string | number | null>;
 }
 
 export type Damage = "none" | "minor" | "major";

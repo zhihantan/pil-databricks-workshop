@@ -57,6 +57,13 @@ def set_status(file_name: str, status: str) -> None:
             _QUEUE[file_name]["status"] = status
 
 
+def apply_corrections(file_name: str, corr: dict[str, Any]) -> None:
+    """Merge reviewer corrections (db-column keyed) into a queue row in place."""
+    with _LOCK:
+        if _QUEUE is not None and file_name in _QUEUE:
+            _QUEUE[file_name].update(corr)
+
+
 def upsert_queue_row(row: dict[str, Any]) -> None:
     """Insert or update one review-queue row keyed by file_name (idempotent)."""
     global _QUEUE

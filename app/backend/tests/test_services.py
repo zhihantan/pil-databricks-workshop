@@ -90,6 +90,45 @@ def test_enqueue_for_review_demo_fallback_shows_in_queue():
     assert any(i.file_name == "up.pdf" and i.exception_type == "missing_po" for i in pend)
 
 
+def test_decide_applies_corrections_and_resolves():
+    from backend.services import demo_store
+
+    demo_store.reset()
+    svc = InvoiceService(conn_factory=None, sql_fn=_fake_sql([]))
+    svc.enqueue_for_review(
+        file_name="fix.pdf", invoice_no="INV-Z", customer="Acme",
+        extracted_total=500.0, exception_type="missing_po")
+    # Reviewer supplies the missing PO and approves.
+    out = svc.decide(
+        "fix.pdf",
+        InvoiceDecisionRequest(decision="approved", corrections={"po_number": "PO-9911"}),
+        actor="tester")
+    assert out["decision"] == "approved"
+    assert out["corrections_applied"]["po_number"] == "PO-9911"
+    # No longer pending; the correction stuck on the row.
+    fresh = InvoiceService(conn_factory=None, sql_fn=_fake_sql([]))
+    assert not any(i.file_name == "fix.pdf" for i in fresh.list_queue(status="pending"))
+    approved = [i for i in fresh.list_queue(status="approved") if i.file_name == "fix.pdf"]
+    assert approved and approved[0].po_number == "PO-9911"
+
+
+def test_decide_corrections_whitelist_ignores_unknown_fields():
+    from backend.services import demo_store
+
+    demo_store.reset()
+    svc = InvoiceService(conn_factory=None, sql_fn=_fake_sql([]))
+    svc.enqueue_for_review("w.pdf", "INV-W", "X", 10.0, "missing_fields")
+    out = svc.decide(
+        "w.pdf",
+        InvoiceDecisionRequest(
+            decision="approved",
+            corrections={"po_number": "PO-1", "status": "hacked", "id": 999},
+        ),
+        actor="t")
+    # only po_number is whitelisted; status/id are ignored
+    assert out["corrections_applied"] == {"po_number": "PO-1"}
+
+
 def test_enqueue_for_review_upserts_in_lakebase():
     captured = []
 

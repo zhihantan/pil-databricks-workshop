@@ -44,18 +44,18 @@ class InvoiceService:
 
     def _list_from_lakebase(self, conn: Any, status: str | None) -> list[dict[str, Any]]:
         try:
+            cols_sql = (
+                "id, file_name, invoice_no, customer, po_number, currency, "
+                "extracted_total, ground_truth_total, exception_type, status"
+            )
             with conn.cursor() as cur:
                 if status:
                     cur.execute(
-                        "SELECT id, file_name, invoice_no, customer, extracted_total, "
-                        "ground_truth_total, exception_type, status "
-                        "FROM pil_app.invoice_review_queue WHERE status=%s "
-                        "ORDER BY id", (status,))
+                        f"SELECT {cols_sql} FROM pil_app.invoice_review_queue "
+                        "WHERE status=%s ORDER BY id", (status,))
                 else:
                     cur.execute(
-                        "SELECT id, file_name, invoice_no, customer, extracted_total, "
-                        "ground_truth_total, exception_type, status "
-                        "FROM pil_app.invoice_review_queue ORDER BY id")
+                        f"SELECT {cols_sql} FROM pil_app.invoice_review_queue ORDER BY id")
                 cols = [c[0] for c in cur.description]
                 return [dict(zip(cols, row, strict=False)) for row in cur.fetchall()]
         except Exception as exc:  # noqa: BLE001
@@ -102,23 +102,32 @@ class InvoiceService:
 
     def _decide_lakebase(self, conn: Any, file_name: str,
                         req: InvoiceDecisionRequest, actor: str) -> dict[str, Any]:
+        corr = _clean_corrections(req)
         try:
             with conn.cursor() as cur:
                 cur.execute(
                     "INSERT INTO pil_app.invoice_decisions "
                     "(file_name, decision, reason, adjusted_total, decided_by) "
                     "VALUES (%s,%s,%s,%s,%s) RETURNING decision_id",
-                    (file_name, req.decision, req.reason, req.adjusted_total, actor))
+                    (file_name, req.decision, _reason_with_corrections(req, corr),
+                     req.adjusted_total, actor))
                 decision_id = cur.fetchone()[0]
+                # Apply reviewer corrections to the queue row, then set status.
+                set_cols = ["status=%s"]
+                params: list[Any] = [req.decision]
+                for col, val in corr.items():
+                    set_cols.append(f"{col}=%s")
+                    params.append(val)
+                params.append(file_name)
                 cur.execute(
-                    "UPDATE pil_app.invoice_review_queue SET status=%s WHERE file_name=%s",
-                    (req.decision, file_name))
+                    f"UPDATE pil_app.invoice_review_queue SET {', '.join(set_cols)} "
+                    "WHERE file_name=%s", tuple(params))
                 cur.execute(
                     "INSERT INTO pil_app.app_audit_log (actor, action, entity) "
                     "VALUES (%s,%s,%s)", (actor, f"invoice_{req.decision}", file_name))
             conn.commit()
             return {"decision_id": decision_id, "file_name": file_name,
-                    "decision": req.decision}
+                    "decision": req.decision, "corrections_applied": corr}
         except Exception as exc:  # noqa: BLE001
             LOG.warning("Lakebase decide failed: %s", exc)
             return self._decide_memory(file_name, req)
@@ -130,8 +139,12 @@ class InvoiceService:
 
     def _decide_memory(self, file_name: str, req: InvoiceDecisionRequest) -> dict[str, Any]:
         self._ensure_demo_seeded()
+        corr = _clean_corrections(req)
+        if corr:
+            demo_store.apply_corrections(file_name, corr)
         demo_store.set_status(file_name, req.decision)
-        return {"decision_id": None, "file_name": file_name, "decision": req.decision}
+        return {"decision_id": None, "file_name": file_name,
+                "decision": req.decision, "corrections_applied": corr}
 
     # ---- enqueue (from the upload flow) ---------------------------------
     def enqueue_for_review(
@@ -141,6 +154,8 @@ class InvoiceService:
         customer: str | None,
         extracted_total: float | None,
         exception_type: str | None,
+        po_number: str | None = None,
+        currency: str | None = None,
     ) -> str:
         """Add a flagged extraction to the review queue (Lakebase, else demo).
 
@@ -154,16 +169,19 @@ class InvoiceService:
                 with conn.cursor() as cur:
                     cur.execute(
                         "INSERT INTO pil_app.invoice_review_queue "
-                        "(file_name, invoice_no, customer, extracted_total, "
-                        " exception_type, status) "
-                        "VALUES (%s,%s,%s,%s,%s,'pending') "
+                        "(file_name, invoice_no, customer, po_number, currency, "
+                        " extracted_total, exception_type, status) "
+                        "VALUES (%s,%s,%s,%s,%s,%s,%s,'pending') "
                         "ON CONFLICT (file_name) DO UPDATE SET "
                         "  invoice_no=EXCLUDED.invoice_no, "
                         "  customer=EXCLUDED.customer, "
+                        "  po_number=EXCLUDED.po_number, "
+                        "  currency=EXCLUDED.currency, "
                         "  extracted_total=EXCLUDED.extracted_total, "
                         "  exception_type=EXCLUDED.exception_type, "
                         "  status='pending'",
-                        (file_name, invoice_no, customer, extracted_total, exception_type),
+                        (file_name, invoice_no, customer, po_number, currency,
+                         extracted_total, exception_type),
                     )
                     cur.execute(
                         "INSERT INTO pil_app.app_audit_log (actor, action, entity) "
@@ -184,6 +202,8 @@ class InvoiceService:
             "file_name": file_name,
             "invoice_no": invoice_no,
             "customer": customer,
+            "po_number": po_number,
+            "currency": currency,
             "extracted_total": extracted_total,
             "ground_truth_total": None,
             "exception_type": exception_type,
@@ -203,3 +223,48 @@ _SAMPLE_QUEUE: list[dict[str, Any]] = [
      "customer": "Zenith Machinery Ltd", "extracted_total": 3990.0,
      "ground_truth_total": 3990.0, "exception_type": "duplicate_no"},
 ]
+
+
+# Reviewer-editable queue columns → their DB column names. Whitelisted so a
+# corrections payload can never touch anything but these (no SQL injection via
+# column names; values are always parameterized).
+_CORRECTABLE = {
+    "po_number": "po_number",
+    "currency": "currency",
+    "invoice_no": "invoice_no",
+    "customer": "customer",
+    "total": "extracted_total",  # UI calls it "total"; queue stores extracted_total
+}
+
+
+def _clean_corrections(req: InvoiceDecisionRequest) -> dict[str, Any]:
+    """Whitelist + normalize the corrections payload to {db_column: value}."""
+    out: dict[str, Any] = {}
+    for key, val in (req.corrections or {}).items():
+        col = _CORRECTABLE.get(key)
+        if col is None:
+            continue
+        if isinstance(val, str):
+            val = val.strip()
+            if val == "":
+                continue
+        if val is None:
+            continue
+        if col == "extracted_total":
+            try:
+                val = float(val)
+            except (TypeError, ValueError):
+                continue
+        out[col] = val
+    # An explicit adjusted_total (legacy field) also corrects the total.
+    if req.adjusted_total is not None:
+        out["extracted_total"] = float(req.adjusted_total)
+    return out
+
+
+def _reason_with_corrections(req: InvoiceDecisionRequest, corr: dict[str, Any]) -> str | None:
+    """Append a human-readable note of what was corrected to the decision reason."""
+    parts = [req.reason] if req.reason else []
+    if corr:
+        parts.append("corrected: " + ", ".join(f"{k}={v}" for k, v in corr.items()))
+    return " · ".join(parts) if parts else None

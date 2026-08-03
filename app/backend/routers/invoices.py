@@ -82,6 +82,8 @@ async def upload_and_extract(
                 customer=result.get("customer_name"),
                 extracted_total=result.get("total"),
                 exception_type=result.get("exception_type"),
+                po_number=result.get("purchase_order"),
+                currency=result.get("currency"),
             ) is not None
         except Exception as exc:  # noqa: BLE001
             result["queued_for_review"] = False

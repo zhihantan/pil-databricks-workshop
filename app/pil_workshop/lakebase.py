@@ -21,6 +21,8 @@ DDL_STATEMENTS: list[str] = [
         file_name          TEXT UNIQUE NOT NULL,
         invoice_no         TEXT,
         customer           TEXT,
+        po_number          TEXT,
+        currency           TEXT,
         extracted_total    DOUBLE PRECISION,
         ground_truth_total DOUBLE PRECISION,
         exception_type     TEXT,
@@ -28,6 +30,9 @@ DDL_STATEMENTS: list[str] = [
         created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
     )
     """,
+    # Add the correction columns if the table pre-exists from an earlier run.
+    "ALTER TABLE pil_app.invoice_review_queue ADD COLUMN IF NOT EXISTS po_number TEXT",
+    "ALTER TABLE pil_app.invoice_review_queue ADD COLUMN IF NOT EXISTS currency TEXT",
     """
     CREATE TABLE IF NOT EXISTS pil_app.invoice_decisions (
         decision_id  BIGSERIAL PRIMARY KEY,

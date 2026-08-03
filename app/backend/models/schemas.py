@@ -100,6 +100,8 @@ class InvoiceQueueItem(BaseModel):
     file_name: str
     invoice_no: str | None = None
     customer: str | None = None
+    po_number: str | None = None
+    currency: str | None = None
     extracted_total: float | None = None
     ground_truth_total: float | None = None
     exception_type: str | None = None
@@ -111,6 +113,9 @@ class InvoiceDecisionRequest(BaseModel):
     decision: Literal["approved", "rejected", "adjusted"]
     reason: str | None = None
     adjusted_total: float | None = None
+    # Reviewer corrections keyed by field name (po_number, currency, invoice_no,
+    # customer, total). Applied to the queue row so a flagged gap is resolved.
+    corrections: dict[str, str | float | None] = Field(default_factory=dict)
 
 
 class InspectionItem(BaseModel):

@@ -14,37 +14,62 @@ import {
 export function InvoiceReview() {
   const qc = useQueryClient();
   const toast = useToast();
-  const [selected, setSelected] = useState<InvoiceQueueItem | null>(null);
-  const [adjusted, setAdjusted] = useState<string>("");
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  // Reviewer corrections for the active invoice, keyed by field name.
+  const [corr, setCorr] = useState<Record<string, string>>({});
 
   const queue = useQuery({ queryKey: ["invoices"], queryFn: () => api.listInvoices() });
 
   const decide = useMutation({
-    mutationFn: ({ fileName, decision }: { fileName: string; decision: Decision }) =>
-      api.decideInvoice(fileName, {
-        decision,
-        // Parse explicitly so an adjustment to 0 isn't dropped by `|| null`.
-        adjusted_total:
-          decision === "adjusted" && adjusted.trim() !== ""
-            ? Number(adjusted)
-            : null,
-      }),
+    mutationFn: ({
+      fileName,
+      decision,
+      corrections,
+    }: {
+      fileName: string;
+      decision: Decision;
+      corrections?: Record<string, string | number | null>;
+    }) => api.decideInvoice(fileName, { decision, corrections }),
     onSuccess: (_data, vars) => {
-      toast.push(`Invoice ${vars.decision}`, "success");
+      toast.push(
+        vars.decision === "rejected" ? "Invoice rejected" : "Invoice approved",
+        "success",
+      );
       qc.invalidateQueries({ queryKey: ["invoices"] });
       qc.invalidateQueries({ queryKey: ["kpis"] });
-      setSelected(null);
+      setSelectedFile(null);
+      setCorr({});
     },
     onError: (e: Error) => toast.push(e.message, "error"),
   });
 
   const items = queue.data ?? [];
-  const active = selected ?? items[0] ?? null;
-  const mismatch =
-    active &&
-    active.ground_truth_total != null &&
-    active.extracted_total != null &&
-    Math.abs(active.ground_truth_total - active.extracted_total) > 1;
+  const active =
+    (selectedFile && items.find((i) => i.file_name === selectedFile)) ||
+    items[0] ||
+    null;
+
+  // Which fields does this exception ask the reviewer to supply/verify?
+  const fieldsFor = (ex: string | null): CorrectionField[] => {
+    if (ex === "missing_po") return ["po_number"];
+    if (ex === "total_mismatch") return ["total"];
+    if (ex === "missing_fields")
+      return (["invoice_no", "customer", "currency", "total"] as CorrectionField[]).filter(
+        (f) => isBlank(active, f),
+      );
+    return [];
+  };
+  const needed = active ? fieldsFor(active.exception_type) : [];
+
+  const submit = (decision: Decision) => {
+    if (!active) return;
+    const corrections: Record<string, string | number | null> = {};
+    for (const [k, v] of Object.entries(corr)) {
+      if (v.trim() === "") continue;
+      corrections[k] = k === "total" ? Number(v) : v.trim();
+    }
+    decide.mutate({ fileName: active.file_name, decision, corrections });
+  };
 
   return (
     <>
@@ -117,7 +142,7 @@ export function InvoiceReview() {
             )}
           </div>
 
-          {/* Right: extracted fields + queue */}
+          {/* Right: extracted fields + correction + queue */}
           <div>
             <div className="card" style={{ marginBottom: 16 }}>
               <h2 className="section-title">
@@ -126,71 +151,64 @@ export function InvoiceReview() {
               </h2>
               {active && (
                 <>
-                  <Field label="Invoice No" value={active.invoice_no ?? "—"} />
-                  <Field label="Customer" value={active.customer ?? "—"} />
-                  <div className="field-row">
-                    <span className="field-label">Extracted total</span>
-                    <span className={`field-value${mismatch ? " mismatch" : ""}`}>
-                      {currency(active.extracted_total)}
-                    </span>
-                  </div>
-                  {mismatch && (
-                    <div className="field-row">
-                      <span className="field-label">Expected total</span>
-                      <span className="field-value">
-                        {currency(active.ground_truth_total)}
-                      </span>
+                  {active.exception_type && (
+                    <div className="review-callout">
+                      {flagGuidance(active.exception_type, needed)}
                     </div>
                   )}
+
+                  <Field label="Invoice No" value={active.invoice_no ?? "—"} />
+                  <Field label="Customer" value={active.customer ?? "—"} />
+                  <Field label="PO Number" value={active.po_number ?? "— (missing)"} />
                   <div className="field-row">
-                    <span className="field-label">Adjust total</span>
+                    <span className="field-label">Extracted total</span>
                     <span className="field-value">
-                      <input
-                        type="number"
-                        placeholder="optional"
-                        value={adjusted}
-                        onChange={(e) => setAdjusted(e.target.value)}
-                      />
+                      {currency(active.extracted_total)} {active.currency ?? ""}
                     </span>
                   </div>
+
+                  {/* Context-aware correction inputs — only what the flag needs. */}
+                  {needed.length > 0 && (
+                    <div className="correct-box">
+                      <div className="correct-title">Correct &amp; resolve</div>
+                      {needed.map((f) => (
+                        <div key={f} className="field-row">
+                          <span className="field-label">{FIELD_LABEL[f]}</span>
+                          <span className="field-value">
+                            <input
+                              type={f === "total" ? "number" : "text"}
+                              placeholder={placeholderFor(f)}
+                              value={corr[f] ?? ""}
+                              onChange={(e) =>
+                                setCorr((c) => ({ ...c, [f]: e.target.value }))
+                              }
+                            />
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
                     <button
                       className="btn btn-approve"
                       disabled={decide.isPending}
-                      onClick={() =>
-                        decide.mutate({
-                          fileName: active.file_name,
-                          decision: "approved",
-                        })
-                      }
+                      onClick={() => submit("approved")}
                     >
-                      Approve
-                    </button>
-                    <button
-                      className="btn btn-ghost"
-                      disabled={decide.isPending || !adjusted}
-                      onClick={() =>
-                        decide.mutate({
-                          fileName: active.file_name,
-                          decision: "adjusted",
-                        })
-                      }
-                    >
-                      Save adjustment
+                      {hasEdits(corr) ? "Save & approve" : "Approve"}
                     </button>
                     <button
                       className="btn btn-reject"
                       disabled={decide.isPending}
-                      onClick={() =>
-                        decide.mutate({
-                          fileName: active.file_name,
-                          decision: "rejected",
-                        })
-                      }
+                      onClick={() => submit("rejected")}
                     >
                       Reject
                     </button>
                   </div>
+                  <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+                    Approve posts the invoice (with your corrections) and clears it from
+                    the queue. Reject sends it back — nothing is posted.
+                  </p>
                 </>
               )}
             </div>
@@ -214,8 +232,8 @@ export function InvoiceReview() {
                         active?.file_name === it.file_name ? " row-selected" : ""
                       }`}
                       onClick={() => {
-                        setSelected(it);
-                        setAdjusted("");
+                        setSelectedFile(it.file_name);
+                        setCorr({});
                       }}
                     >
                       <td>{it.invoice_no ?? it.file_name}</td>
@@ -234,6 +252,44 @@ export function InvoiceReview() {
       )}
     </>
   );
+}
+
+type CorrectionField = "po_number" | "currency" | "invoice_no" | "customer" | "total";
+
+const FIELD_LABEL: Record<CorrectionField, string> = {
+  po_number: "PO Number",
+  currency: "Currency",
+  invoice_no: "Invoice No",
+  customer: "Customer",
+  total: "Corrected total",
+};
+
+function isBlank(item: InvoiceQueueItem | null, f: CorrectionField): boolean {
+  if (!item) return false;
+  if (f === "total") return item.extracted_total == null;
+  return !item[f];
+}
+
+function placeholderFor(f: CorrectionField): string {
+  if (f === "total") return "enter correct total";
+  if (f === "currency") return "e.g. USD";
+  return `enter ${FIELD_LABEL[f].toLowerCase()}`;
+}
+
+function hasEdits(corr: Record<string, string>): boolean {
+  return Object.values(corr).some((v) => v.trim() !== "");
+}
+
+function flagGuidance(ex: string, needed: CorrectionField[]): string {
+  if (ex === "missing_po")
+    return "⚠ No PO number was extracted. Check the document — add the PO below if it applies, or approve as-is when the invoice legitimately has none.";
+  if (ex === "total_mismatch")
+    return "⚠ The total doesn't reconcile with subtotal, tax and adjustments. Verify against the document and enter the correct total below.";
+  if (ex === "missing_fields")
+    return `⚠ Key field(s) missing: ${needed
+      .map((f) => FIELD_LABEL[f])
+      .join(", ")}. Fill them in from the document, then approve.`;
+  return "⚠ Flagged for review — verify against the document before approving.";
 }
 
 function Field({ label, value }: { label: string; value: string }) {
