@@ -10,25 +10,68 @@ from pydantic import BaseModel, Field
 
 class InvoiceLineItem(BaseModel):
     description: str | None = None
+    quantity: float | None = None
+    unit_price: float | None = None
     amount: float | None = None
 
 
+class ExtractionMetrics(BaseModel):
+    """Run metrics for one extraction (shown in the app while/after loading)."""
+
+    duration_ms: int = 0
+    save_ms: int = 0
+    extract_ms: int = 0
+    doc_chars: int = 0
+    est_input_tokens: int = 0
+    est_output_tokens: int = 0
+    est_total_tokens: int = 0
+    est_cost_usd: float = 0.0
+    model_endpoint: str | None = None
+    field_count: int = 0
+    line_item_count: int = 0
+
+
 class ExtractedInvoice(BaseModel):
-    """Structured output of the upload → parse → extract flow."""
+    """Structured output of the upload → parse → extract flow (rich ~22 fields)."""
 
     file_name: str
     volume_path: str
+    # header
     invoice_no: str | None = None
-    customer: str | None = None
-    po_number: str | None = None
+    invoice_date: str | None = None
+    due_date: str | None = None
+    purchase_order: str | None = None
+    # parties
+    vendor_name: str | None = None
+    vendor_tax_id: str | None = None
+    vendor_address: str | None = None
+    customer_name: str | None = None
+    customer_address: str | None = None
+    # freight / shipping
     currency: str | None = None
-    date: str | None = None
+    incoterms: str | None = None
+    bill_of_lading: str | None = None
+    vessel_name: str | None = None
+    container_numbers: list[str] = Field(default_factory=list)
+    port_of_loading: str | None = None
+    port_of_discharge: str | None = None
+    # terms
     payment_terms: str | None = None
+    bank_details: str | None = None
+    notes: str | None = None
+    # money
     subtotal: float | None = None
+    discount: float | None = None
+    shipping: float | None = None
     tax: float | None = None
+    tax_rate: str | None = None
     total: float | None = None
+    amount_paid: float | None = None
+    balance_due: float | None = None
     line_items: list[InvoiceLineItem] = Field(default_factory=list)
+    # derived / meta
     exception_type: str | None = None
+    metrics: ExtractionMetrics | None = None
 
 
 class HealthResponse(BaseModel):

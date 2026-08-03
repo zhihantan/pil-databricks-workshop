@@ -69,19 +69,27 @@ def test_save_to_volume_writes_pdf_path():
 def test_extract_clean_invoice_no_exception():
     flat = {"invoice_no": "INV-1", "customer": "Acme", "po_number": "PO1",
             "currency": "USD", "total": "1,000.00 USD"}
-    nested = {"subtotal": 900.0, "tax": 100.0, "total": 1000.0,
-              "line_items": [{"description": "Ocean Freight", "amount": 900.0}]}
+    nested = {"purchase_order": "PO1", "customer_name": "Acme",
+              "subtotal": 900.0, "tax": 100.0, "total": 1000.0,
+              "line_items": [{"description": "Ocean Freight", "amount": 900.0,
+                              "quantity": 1, "unit_price": 900.0}]}
     svc = ExtractionService(sql_fn=_sql_fn_returning(flat, nested))
     r = svc.extract("/Volumes/c/bronze/raw_invoices/a.pdf")
     assert r["invoice_no"] == "INV-1"
+    assert r["customer_name"] == "Acme"
     assert r["total"] == 1000.0 and r["exception_type"] is None
     assert len(r["line_items"]) == 1
+    assert r["line_items"][0]["quantity"] == 1.0
+    # metrics are always attached
+    assert r["metrics"]["est_total_tokens"] > 0
+    assert r["metrics"]["field_count"] > 0
 
 
 def test_extract_flags_total_mismatch():
     flat = {"invoice_no": "INV-2", "customer": "X", "po_number": "PO2",
             "currency": "CNY", "total": "2,490.40 CNY"}
-    nested = {"subtotal": 1753.38, "tax": 122.74, "total": 2490.4, "line_items": []}
+    nested = {"purchase_order": "PO2", "subtotal": 1753.38, "tax": 122.74,
+              "total": 2490.4, "line_items": []}
     svc = ExtractionService(sql_fn=_sql_fn_returning(flat, nested))
     r = svc.extract("/Volumes/c/bronze/raw_invoices/b.pdf")
     # 2490.40 != 1753.38 + 122.74
@@ -91,20 +99,45 @@ def test_extract_flags_total_mismatch():
 def test_extract_flags_missing_po_placeholder():
     flat = {"invoice_no": "INV-3", "customer": "Y", "po_number": "—",
             "currency": "USD", "total": "500.00"}
-    nested = {"subtotal": 500.0, "tax": 0.0, "total": 500.0, "line_items": []}
+    nested = {"purchase_order": "—", "subtotal": 500.0, "tax": 0.0,
+              "total": 500.0, "line_items": []}
     svc = ExtractionService(sql_fn=_sql_fn_returning(flat, nested))
     r = svc.extract("/Volumes/c/bronze/raw_invoices/c.pdf")
-    assert r["po_number"] is None and r["exception_type"] == "missing_po"
+    assert r["purchase_order"] is None and r["exception_type"] == "missing_po"
 
 
-def test_process_upload_saves_then_extracts():
+def test_discount_reconciles_without_false_mismatch():
+    # subtotal 4295 - discount 95 + tax 378 = 4578 = total; must NOT flag.
+    flat = {"invoice_no": "INV-6", "currency": "SGD", "total": "4,578.00"}
+    nested = {"purchase_order": "PO6", "subtotal": 4295.0, "discount": 95.0,
+              "shipping": 0.0, "tax": 378.0, "total": 4578.0, "line_items": []}
+    svc = ExtractionService(sql_fn=_sql_fn_returning(flat, nested))
+    r = svc.extract("/Volumes/c/bronze/raw_invoices/f.pdf")
+    assert r["exception_type"] is None
+    assert r["discount"] == 95.0
+
+
+def test_currency_symbol_normalized_to_iso():
+    flat = {"invoice_no": "INV-5", "currency": "£", "total": "1,602.00"}
+    nested = {"purchase_order": "PO5", "currency": "£", "subtotal": 1335.0,
+              "tax": 267.0, "total": 1602.0, "line_items": []}
+    svc = ExtractionService(sql_fn=_sql_fn_returning(flat, nested))
+    r = svc.extract("/Volumes/c/bronze/raw_invoices/e.pdf")
+    assert r["currency"] == "GBP"
+
+
+def test_process_upload_saves_then_extracts_with_metrics():
     wc = _FakeWC()
     flat = {"invoice_no": "INV-4", "customer": "Z", "po_number": "PO4",
             "currency": "USD", "total": "10.00"}
-    nested = {"subtotal": 10.0, "tax": 0.0, "total": 10.0, "line_items": []}
+    nested = {"purchase_order": "PO4", "subtotal": 10.0, "tax": 0.0,
+              "total": 10.0, "line_items": []}
     svc = ExtractionService(
         workspace_client=wc, sql_fn=_sql_fn_returning(flat, nested)
     )
     r = svc.process_upload("d.pdf", b"%PDF bytes")
     assert r["invoice_no"] == "INV-4"
     assert any(p.endswith("/raw_invoices/d.pdf") for p in wc.files.saved)
+    # duration_ms rolls up save + extract
+    m = r["metrics"]
+    assert m["duration_ms"] >= m["extract_ms"] and m["save_ms"] >= 0

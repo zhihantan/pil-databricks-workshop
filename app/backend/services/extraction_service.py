@@ -66,7 +66,7 @@ class ExtractionService:
 
     # ---- 2+3. extract + derive exception --------------------------------
     def extract(self, volume_path: str) -> dict[str, Any]:
-        """Run the extraction on one file; return structured data.
+        """Run the extraction on one file; return rich structured data + metrics.
 
         Parses (``ai_parse_document``) and pulls flat fields (``ai_extract``)
         inline, then delegates the nested/line-item extraction to the governed
@@ -74,6 +74,8 @@ class ExtractionService:
         endpoint is baked into that function (created by setup), so the app no
         longer passes an endpoint name here.
         """
+        import time
+
         from pil_workshop.agent_bricks import build_single_invoice_extraction_sql
 
         if not self._sql_fn:
@@ -83,57 +85,148 @@ class ExtractionService:
             )
         catalog = get_settings().catalog
         sql = build_single_invoice_extraction_sql(catalog, volume_path)
+        t0 = time.perf_counter()
         rows = list(self._sql_fn(sql))
+        extract_ms = int((time.perf_counter() - t0) * 1000)
         if not rows:
             raise RuntimeError("Extraction returned no rows (parse may have failed).")
         row = rows[0]
         flat = _as_dict(row.get("flat"))
         nested = _parse_json(row.get("nested_json"))
-        return self._assemble(volume_path, flat, nested)
+        doc_chars = int(row.get("doc_chars") or 0)
+        raw_json = row.get("nested_json") or ""
+        metrics = self._metrics(doc_chars, str(raw_json), extract_ms, nested)
+        return self._assemble(volume_path, flat, nested, metrics)
+
+    def _metrics(
+        self, doc_chars: int, raw_json: str, extract_ms: int, nested: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Estimate tokens/cost for the governed ai_query call.
+
+        ai_query exposes no usage metadata inline and the system usage tables lag
+        ~a day, so tokens are ESTIMATED from character counts (~4 chars/token, a
+        good approximation for English + the JSON we send/receive). The prompt
+        instruction adds a fixed overhead on top of the parsed document text.
+        Cost uses the same blended $/1M rate as the gold usage views.
+        """
+        input_chars = doc_chars + _INSTRUCTION_OVERHEAD_CHARS
+        est_in = max(1, round(input_chars / _CHARS_PER_TOKEN))
+        est_out = max(1, round(len(raw_json) / _CHARS_PER_TOKEN))
+        est_total = est_in + est_out
+        return {
+            "extract_ms": extract_ms,
+            "doc_chars": doc_chars,
+            "est_input_tokens": est_in,
+            "est_output_tokens": est_out,
+            "est_total_tokens": est_total,
+            "est_cost_usd": round(est_total / 1_000_000 * _COST_PER_M_TOKENS, 4),
+            "field_count": _non_null_field_count(nested),
+            "line_item_count": len(nested.get("line_items") or []),
+        }
 
     def _assemble(
-        self, volume_path: str, flat: dict[str, Any], nested: dict[str, Any]
+        self,
+        volume_path: str,
+        flat: dict[str, Any],
+        nested: dict[str, Any],
+        metrics: dict[str, Any],
     ) -> dict[str, Any]:
         import os
 
-        po = _blank_to_none(flat.get("po_number") or nested.get("po_number"))
+        # PO can arrive under the rich key (purchase_order) or the flat struct.
+        po = _blank_to_none(
+            nested.get("purchase_order") or flat.get("po_number")
+        )
         subtotal = _num(nested.get("subtotal"))
         tax = _num(nested.get("tax")) or 0.0
+        discount = _num(nested.get("discount")) or 0.0
+        shipping = _num(nested.get("shipping")) or 0.0
         total = _num(nested.get("total")) or _num(flat.get("total"))
         line_items = nested.get("line_items") or []
 
+        # total_mismatch only when the arithmetic genuinely doesn't reconcile.
+        # A discount reduces the total whether the model returns it as +95 or
+        # -95, so try both signs and accept if EITHER reconciles (with a small
+        # tolerance and a relative floor for large-value invoices).
         exception = None
         if total is not None and subtotal is not None:
-            if abs(total - (subtotal + tax)) > 1.0:
+            tol = max(1.0, abs(total) * 0.01)
+            candidates = {
+                subtotal + tax,  # simple invoices with no discount/shipping
+                subtotal - discount + shipping + tax,
+                subtotal + discount + shipping + tax,
+            }
+            if not any(abs(total - c) <= tol for c in candidates):
                 exception = "total_mismatch"
         if exception is None and po is None:
             exception = "missing_po"
 
+        containers = nested.get("container_numbers") or []
+        if isinstance(containers, str):
+            containers = [containers]
+
         return {
             "file_name": os.path.basename(volume_path),
             "volume_path": volume_path,
-            "invoice_no": flat.get("invoice_no") or nested.get("invoice_no"),
-            "customer": flat.get("customer") or nested.get("customer"),
-            "po_number": po,
-            "currency": flat.get("currency") or nested.get("currency"),
-            "date": nested.get("date"),
+            # header
+            "invoice_no": nested.get("invoice_no") or flat.get("invoice_no"),
+            "invoice_date": nested.get("invoice_date") or nested.get("date"),
+            "due_date": nested.get("due_date"),
+            "purchase_order": po,
+            # parties
+            "vendor_name": nested.get("vendor_name"),
+            "vendor_tax_id": nested.get("vendor_tax_id"),
+            "vendor_address": nested.get("vendor_address"),
+            "customer_name": nested.get("customer_name") or flat.get("customer"),
+            "customer_address": nested.get("customer_address"),
+            # freight / shipping
+            "currency": _norm_currency(nested.get("currency") or flat.get("currency")),
+            "incoterms": nested.get("incoterms"),
+            "bill_of_lading": nested.get("bill_of_lading"),
+            "vessel_name": nested.get("vessel_name"),
+            "container_numbers": [str(c) for c in containers if c],
+            "port_of_loading": nested.get("port_of_loading"),
+            "port_of_discharge": nested.get("port_of_discharge"),
+            # terms
             "payment_terms": nested.get("payment_terms"),
+            "bank_details": nested.get("bank_details"),
+            "notes": nested.get("notes"),
+            # money
             "subtotal": subtotal,
+            "discount": _num(nested.get("discount")),
+            "shipping": _num(nested.get("shipping")),
             "tax": tax,
+            "tax_rate": _str_or_none(nested.get("tax_rate")),
             "total": total,
+            "amount_paid": _num(nested.get("amount_paid")),
+            "balance_due": _num(nested.get("balance_due")),
             "line_items": [
-                {"description": li.get("description"), "amount": _num(li.get("amount"))}
+                {
+                    "description": li.get("description"),
+                    "quantity": _num(li.get("quantity")),
+                    "unit_price": _num(li.get("unit_price")),
+                    "amount": _num(li.get("amount")),
+                }
                 for li in line_items
                 if isinstance(li, dict)
             ],
             "exception_type": exception,
+            "metrics": {"model_endpoint": _model_endpoint(), **metrics},
         }
 
     # ---- orchestration ---------------------------------------------------
     def process_upload(self, file_name: str, content: bytes) -> dict[str, Any]:
-        """Full flow: save to Volume → extract → structured output."""
+        """Full flow: save to Volume → extract → structured output + metrics."""
+        import time
+
+        t0 = time.perf_counter()
         path = self.save_to_volume(file_name, content)
+        save_ms = int((time.perf_counter() - t0) * 1000)
         result = self.extract(path)
+        m = result.get("metrics") or {}
+        m["save_ms"] = save_ms
+        m["duration_ms"] = save_ms + int(m.get("extract_ms") or 0)
+        result["metrics"] = m
         return result
 
 
@@ -183,3 +276,60 @@ def _blank_to_none(v: Any) -> str | None:
         return None
     s = str(v).strip()
     return None if s.lower() in ("", "—", "-", "n/a", "none", "null") else s
+
+
+def _str_or_none(v: Any) -> str | None:
+    if v is None:
+        return None
+    s = str(v).strip()
+    return s or None
+
+
+# Common currency symbol → ISO 4217 (the model is asked to return ISO, this is a
+# safety net for stray symbols).
+_CURRENCY_SYMBOLS = {
+    "$": "USD", "£": "GBP", "€": "EUR", "¥": "JPY", "₹": "INR",
+    "s$": "SGD", "sgd": "SGD", "rmb": "CNY", "元": "CNY",
+}
+
+
+def _norm_currency(v: Any) -> str | None:
+    s = _blank_to_none(v)
+    if s is None:
+        return None
+    key = s.strip().lower()
+    if key in _CURRENCY_SYMBOLS:
+        return _CURRENCY_SYMBOLS[key]
+    # a bare symbol embedded in a short string
+    for sym, iso in _CURRENCY_SYMBOLS.items():
+        if sym in s and len(s) <= 4:
+            return iso
+    # already an ISO-ish 3-letter code
+    return s.upper() if len(s) == 3 and s.isalpha() else s
+
+
+def _non_null_field_count(nested: dict[str, Any]) -> int:
+    """Count populated top-level fields (line_items counted as one if present)."""
+    n = 0
+    for k, v in nested.items():
+        if v in (None, "", [], {}):
+            continue
+        n += 1
+    return n
+
+
+def _model_endpoint() -> str | None:
+    """Best-effort resolve the governed FMAPI endpoint name for display."""
+    try:
+        from backend.services.clients import text_endpoint_name
+
+        return text_endpoint_name()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# Token/cost estimation constants (ai_query exposes no inline usage; system
+# usage tables lag ~a day, so we estimate and clearly label it "est.").
+_CHARS_PER_TOKEN = 4.0
+_INSTRUCTION_OVERHEAD_CHARS = 900  # the fixed prompt instruction we prepend
+_COST_PER_M_TOKENS = 5.0  # same blended $/1M as gold.v_ai_usage_daily

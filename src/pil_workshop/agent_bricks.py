@@ -111,12 +111,27 @@ _EXTRACT_LABELS = ("invoice_no", "customer", "po_number", "currency", "total")
 
 # The single instruction string used by the nested ai_query extraction, shared
 # by the batch pipeline, the app query, and the governed UC function so all three
-# ask the model for the exact same JSON shape.
+# ask the model for the exact same JSON shape. Rich ~22-field schema covering
+# header, parties, freight/shipping specifics, and money. Missing fields must be
+# null (never invented) so downstream logic can trust absence.
 _NESTED_INSTRUCTION = (
-    "Extract this freight invoice as JSON with keys: invoice_no, date, "
-    "customer, po_number, currency, line_items (array of objects with "
-    "description and amount), subtotal, tax, total, payment_terms. "
-    "Return ONLY JSON."
+    "You are extracting a commercial/freight invoice into JSON. Return ONLY a "
+    "JSON object (no prose, no code fences) with EXACTLY these keys; use null "
+    "for anything not present — never guess:\n"
+    "  invoice_no, invoice_date, due_date, purchase_order (PO number),\n"
+    "  vendor_name, vendor_tax_id, vendor_address,\n"
+    "  customer_name, customer_address,\n"
+    "  currency (ISO 4217 code, e.g. USD/EUR/GBP/JPY/CNY/SGD),\n"
+    "  incoterms, bill_of_lading, vessel_name, container_numbers (array of "
+    "strings), port_of_loading, port_of_discharge,\n"
+    "  payment_terms, bank_details,\n"
+    "  line_items (array of objects: description, quantity, unit_price, amount),\n"
+    "  subtotal, discount, shipping, tax, tax_rate, total, amount_paid, "
+    "balance_due,\n"
+    "  notes.\n"
+    "Normalize all monetary values to plain numbers (no thousands separators, "
+    "use '.' as the decimal point even if the source uses commas). Convert any "
+    "currency symbol to its ISO code."
 )
 
 # Fully-qualified name of the governed UC function that wraps the nested
@@ -150,10 +165,12 @@ def build_invoice_extraction_function_ddl(catalog: str, text_endpoint: str) -> s
     return f"""
 CREATE OR REPLACE FUNCTION {invoice_function_name(catalog)}(doc_text STRING)
 RETURNS STRING
-COMMENT 'PIL freight-invoice extraction via governed FMAPI ({endpoint}). '
-        'Input: parsed invoice text. Output: JSON with invoice_no, date, '
-        'customer, po_number, currency, line_items[], subtotal, tax, total, '
-        'payment_terms.'
+COMMENT 'PIL freight/commercial invoice extraction via governed FMAPI ({endpoint}). '
+        'Input: parsed invoice text. Output: rich JSON (~22 fields) — header '
+        '(invoice_no, dates, PO), parties (vendor/customer name, address, tax id), '
+        'freight (incoterms, bill_of_lading, vessel, containers[], ports), '
+        'line_items[] (description, quantity, unit_price, amount), and money '
+        '(subtotal, discount, shipping, tax, tax_rate, total, amount_paid, balance_due).'
 RETURN ai_query(
     '{endpoint}',
     CONCAT('{instruction}\\n\\nTEXT:\\n', doc_text)
@@ -262,8 +279,9 @@ def build_single_invoice_extraction_sql(catalog: str, file_path: str) -> str:
     UC function ``<catalog>.default.extract_invoice_fields`` so the app and the
     batch pipeline share one versioned, permissioned extraction asset.
 
-    Returns columns ``flat`` (struct) and ``nested_json`` (raw model JSON —
-    caller strips/parses), unchanged from before, so the consumer is unaffected.
+    Returns columns ``flat`` (struct), ``nested_json`` (raw model JSON — caller
+    strips/parses) and ``doc_chars`` (parsed-text length, for token/cost
+    estimation in the app).
     """
     # Escape single quotes in the path defensively (paths are server-controlled,
     # but keep this robust).
@@ -280,7 +298,8 @@ WITH parsed AS (
 )
 SELECT
     ai_extract(text, array({labels})) AS flat,
-    {invoice_function_name(catalog)}(text) AS nested_json
+    {invoice_function_name(catalog)}(text) AS nested_json,
+    LENGTH(text) AS doc_chars
 FROM parsed
 """.strip()
 

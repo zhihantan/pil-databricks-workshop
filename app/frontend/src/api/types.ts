@@ -2,23 +2,64 @@
 
 export interface InvoiceLineItem {
   description: string | null;
+  quantity: number | null;
+  unit_price: number | null;
   amount: number | null;
+}
+
+export interface ExtractionMetrics {
+  duration_ms: number;
+  save_ms: number;
+  extract_ms: number;
+  doc_chars: number;
+  est_input_tokens: number;
+  est_output_tokens: number;
+  est_total_tokens: number;
+  est_cost_usd: number;
+  model_endpoint: string | null;
+  field_count: number;
+  line_item_count: number;
 }
 
 export interface ExtractedInvoice {
   file_name: string;
   volume_path: string;
+  // header
   invoice_no: string | null;
-  customer: string | null;
-  po_number: string | null;
+  invoice_date: string | null;
+  due_date: string | null;
+  purchase_order: string | null;
+  // parties
+  vendor_name: string | null;
+  vendor_tax_id: string | null;
+  vendor_address: string | null;
+  customer_name: string | null;
+  customer_address: string | null;
+  // freight / shipping
   currency: string | null;
-  date: string | null;
+  incoterms: string | null;
+  bill_of_lading: string | null;
+  vessel_name: string | null;
+  container_numbers: string[];
+  port_of_loading: string | null;
+  port_of_discharge: string | null;
+  // terms
   payment_terms: string | null;
+  bank_details: string | null;
+  notes: string | null;
+  // money
   subtotal: number | null;
+  discount: number | null;
+  shipping: number | null;
   tax: number | null;
+  tax_rate: string | null;
   total: number | null;
+  amount_paid: number | null;
+  balance_due: number | null;
   line_items: InvoiceLineItem[];
+  // derived / meta
   exception_type: string | null;
+  metrics: ExtractionMetrics | null;
 }
 
 export interface HealthResponse {
