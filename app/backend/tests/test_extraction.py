@@ -96,6 +96,38 @@ def test_extract_flags_total_mismatch():
     assert r["exception_type"] == "total_mismatch"
 
 
+def test_extract_flags_missing_fields_when_key_field_absent():
+    # PO present + totals reconcile, but customer is missing → missing_fields.
+    flat = {"invoice_no": "INV-8", "po_number": "PO8", "currency": "USD",
+            "total": "500.00"}
+    nested = {"purchase_order": "PO8", "invoice_no": "INV-8", "currency": "USD",
+              "subtotal": 500.0, "tax": 0.0, "total": 500.0, "line_items": []}
+    svc = ExtractionService(sql_fn=_sql_fn_returning(flat, nested))
+    r = svc.extract("/Volumes/c/bronze/raw_invoices/g.pdf")
+    assert r["customer_name"] is None
+    assert r["exception_type"] == "missing_fields"
+
+
+def test_missing_fields_when_total_absent():
+    flat = {"invoice_no": "INV-11", "customer": "Y", "po_number": "PO11", "currency": "USD"}
+    nested = {"purchase_order": "PO11", "invoice_no": "INV-11", "customer_name": "Y",
+              "currency": "USD", "subtotal": 100.0, "line_items": []}
+    svc = ExtractionService(sql_fn=_sql_fn_returning(flat, nested))
+    r = svc.extract("/Volumes/c/bronze/raw_invoices/h.pdf")
+    assert r["total"] is None and r["exception_type"] == "missing_fields"
+
+
+def test_total_mismatch_takes_priority_over_missing_fields():
+    # customer missing AND totals don't reconcile → total_mismatch wins.
+    flat = {"invoice_no": "INV-12", "currency": "USD", "total": "999.00"}
+    nested = {"purchase_order": "PO12", "invoice_no": "INV-12", "currency": "USD",
+              "subtotal": 100.0, "tax": 5.0, "total": 999.0, "line_items": []}
+    svc = ExtractionService(sql_fn=_sql_fn_returning(flat, nested))
+    r = svc.extract("/Volumes/c/bronze/raw_invoices/i.pdf")
+    assert r["customer_name"] is None  # a key field is missing
+    assert r["exception_type"] == "total_mismatch"  # but mismatch is more severe
+
+
 def test_extract_flags_missing_po_placeholder():
     flat = {"invoice_no": "INV-3", "customer": "Y", "po_number": "—",
             "currency": "USD", "total": "500.00"}
@@ -108,8 +140,11 @@ def test_extract_flags_missing_po_placeholder():
 
 def test_discount_reconciles_without_false_mismatch():
     # subtotal 4295 - discount 95 + tax 378 = 4578 = total; must NOT flag.
-    flat = {"invoice_no": "INV-6", "currency": "SGD", "total": "4,578.00"}
-    nested = {"purchase_order": "PO6", "subtotal": 4295.0, "discount": 95.0,
+    # All key fields present so this isolates the discount-reconciliation intent.
+    flat = {"invoice_no": "INV-6", "customer": "Acme", "currency": "SGD",
+            "total": "4,578.00"}
+    nested = {"purchase_order": "PO6", "invoice_no": "INV-6", "customer_name": "Acme",
+              "currency": "SGD", "subtotal": 4295.0, "discount": 95.0,
               "shipping": 0.0, "tax": 378.0, "total": 4578.0, "line_items": []}
     svc = ExtractionService(sql_fn=_sql_fn_returning(flat, nested))
     r = svc.extract("/Volumes/c/bronze/raw_invoices/f.pdf")

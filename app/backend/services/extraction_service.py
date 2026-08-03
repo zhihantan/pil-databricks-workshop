@@ -151,10 +151,30 @@ class ExtractionService:
         total = _num(nested.get("total")) or _num(flat.get("total"))
         line_items = nested.get("line_items") or []
 
-        # total_mismatch only when the arithmetic genuinely doesn't reconcile.
+        # Key fields whose absence means the extraction isn't usable and needs a
+        # human — checked so an invoice with missing important values is routed
+        # to the review queue, not just a missing PO.
+        invoice_no = _blank_to_none(nested.get("invoice_no") or flat.get("invoice_no"))
+        customer_name = _blank_to_none(nested.get("customer_name") or flat.get("customer"))
+        currency = _norm_currency(nested.get("currency") or flat.get("currency"))
+        missing = [
+            name
+            for name, val in (
+                ("invoice_no", invoice_no),
+                ("total", total),
+                ("customer", customer_name),
+                ("currency", currency),
+            )
+            if val is None
+        ]
+
+        # Exception priority (most severe first):
+        #   1. total_mismatch — amounts present but don't reconcile (data integrity)
+        #   2. missing_fields — a key field the workflow needs is absent
+        #   3. missing_po     — PO specifically absent (freight convention)
         # A discount reduces the total whether the model returns it as +95 or
-        # -95, so try both signs and accept if EITHER reconciles (with a small
-        # tolerance and a relative floor for large-value invoices).
+        # -95, so try both signs and accept if EITHER reconciles (small tolerance
+        # + relative floor for large-value invoices).
         exception = None
         if total is not None and subtotal is not None:
             tol = max(1.0, abs(total) * 0.01)
@@ -165,6 +185,8 @@ class ExtractionService:
             }
             if not any(abs(total - c) <= tol for c in candidates):
                 exception = "total_mismatch"
+        if exception is None and missing:
+            exception = "missing_fields"
         if exception is None and po is None:
             exception = "missing_po"
 
