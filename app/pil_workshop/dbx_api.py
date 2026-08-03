@@ -578,6 +578,32 @@ def deploy_app(
         ) from exc
 
 
+def app_service_principal_id(app_name: str, client: Any | None = None) -> str | None:
+    """Return the client_id of the service principal a Databricks App runs as.
+
+    Used to scope AI-usage views to the app's own calls (its SP is the
+    ``requester`` recorded in ``system.serving.endpoint_usage``). Returns
+    ``None`` if the app doesn't exist yet (e.g. usage views are built before the
+    app is deployed on a fresh install) or the field isn't populated — callers
+    degrade gracefully.
+    """
+    wc = _ws(client)
+    apps = getattr(wc, "apps", None)
+    if apps is None:
+        return None
+    try:
+        app = wc.apps.get(name=app_name)
+    except Exception as exc:  # noqa: BLE001 - app not created yet
+        LOG.info("App '%s' not found (SP unresolved yet): %s", app_name, exc)
+        return None
+    # SDK field name has varied across versions; try the known spellings.
+    for attr in ("service_principal_client_id", "service_principal_id", "service_principal_name"):
+        val = getattr(app, attr, None)
+        if val:
+            return str(val)
+    return None
+
+
 # ===========================================================================
 # Model serving for MLflow models (Phase 5)
 # ===========================================================================

@@ -64,8 +64,14 @@ export function Gateway() {
           <div className="card" style={{ marginTop: 18 }}>
             <h2 className="section-title">How governance works here</h2>
             <ul className="muted" style={{ lineHeight: 1.9, paddingLeft: 18, margin: 0 }}>
-              <li>All agent model calls route through one governed FMAPI endpoint (no external providers).</li>
-              <li>Per-user rate limits and usage tracking are enabled on that endpoint.</li>
+              <li>Both agents call the same governed FMAPI endpoint (no external providers).</li>
+              <li>Rate limits and usage tracking are enabled on that endpoint via Unity AI Gateway.</li>
+              <li>
+                The figures above are scoped to this project&apos;s agents — filtered by
+                endpoint <em>and</em> requester identity (the app&apos;s service principal
+                and the setup user), since the underlying pay-per-token endpoint is shared
+                across the workspace.
+              </li>
               <li>Token/request/cost metrics flow to the gold usage views and dashboard Page 4.</li>
             </ul>
           </div>

@@ -37,6 +37,12 @@ VOLUME_INVOICES = "raw_invoices"  # synthetic freight-invoice PDFs
 VOLUME_IMAGES = "container_images"  # synthetic labeled container images
 VOLUMES: tuple[str, ...] = (VOLUME_RAW, VOLUME_INVOICES, VOLUME_IMAGES)
 
+# Databricks App name (used by 10_deploy_app and to resolve the app's service
+# principal when scoping AI-usage views to this project's agents).
+APP_NAME = "pil-invoice-vision"
+# Lakebase instance name (app mints its own credential via the SDK).
+LAKEBASE_INSTANCE = "pil-workshop-db"
+
 # Deterministic seed for every random generator in the repo.
 SEED = 42
 

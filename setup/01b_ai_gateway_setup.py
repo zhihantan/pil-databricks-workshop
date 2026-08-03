@@ -205,11 +205,44 @@ _EMPTY_USAGE_BASE = """
 
 
 gold = f"`{CATALOG}`.`{config.GOLD}`"
-if _usage_source_exists():
+
+# Scope Page 4 (and the app's AI Gateway tab) to THIS workshop's agents, not
+# every serving endpoint in the (often busy, shared) workspace. Two filters:
+#   1. endpoint  — the resolved text + vision FMAPI endpoints the agents call;
+#   2. requester — the identities the agents run as. Claude is a shared
+#      pay-per-token endpoint that the whole workspace uses, so the endpoint
+#      name alone is not enough; we also match the app's service principal
+#      (live app: uploads + re-analysis) and the setup run-as user (notebook 08
+#      container vision + bulk invoice extraction). Nothing is hardcoded — the
+#      SP is resolved from the app by name; the user from current_user().
+_scoped_endpoints = sorted({resolved.text, resolved.vision})
+_endpoint_in_list = ", ".join("'" + e.replace("'", "''") + "'" for e in _scoped_endpoints)
+
+# Resolve agent identities dynamically. On a fresh install the app is deployed
+# AFTER this notebook, so its SP may not exist yet — that's fine: it has also
+# produced zero traffic at that point, and the next daily run self-heals the
+# filter to include it.
+_requesters: set[str] = set()
+try:
+    _me = wc.current_user.me().user_name
+    if _me:
+        _requesters.add(_me)
+except Exception as exc:  # noqa: BLE001
+    warn(f"Could not resolve current user for usage scoping: {exc}")
+_app_sp = dbx_api.app_service_principal_id(config.APP_NAME, client=wc)
+if _app_sp:
+    _requesters.add(_app_sp)
+    ok(f"Scoping usage to app SP {_app_sp} + user(s) {sorted(_requesters - {_app_sp})}.")
+else:
+    warn(f"App '{config.APP_NAME}' SP not resolvable yet (deployed later); "
+         "usage scoped to the setup user for now — reruns will add the app SP.")
+
+if _usage_source_exists() and _requesters:
+    _requester_in_list = ", ".join("'" + r.replace("'", "''") + "'" for r in sorted(_requesters))
     # The usage table carries served_entity_id; join system.serving.served_entities
     # to resolve the human-readable endpoint name. Column is request_time (not
-    # requesttime). Scope to this workshop's endpoints so Page 4 reflects the
-    # governed FMAPI traffic, not every endpoint in the workspace.
+    # requesttime). The endpoint filter matches the same COALESCE expression used
+    # for the `endpoint` column so it works whether or not the name resolves.
     base = f"""
         SELECT
             CAST(u.request_time AS DATE)              AS usage_date,
@@ -223,12 +256,18 @@ if _usage_source_exists():
         LEFT JOIN system.serving.served_entities e
           ON u.served_entity_id = e.served_entity_id
         WHERE u.request_time >= DATE_SUB(CURRENT_DATE(), 30)
+          AND COALESCE(e.endpoint_name, u.served_entity_id) IN ({_endpoint_in_list})
+          AND u.requester IN ({_requester_in_list})
     """
-    ok("System usage table found — building live usage views.")
+    ok(f"System usage table found — building live usage views "
+       f"scoped to endpoints [{', '.join(_scoped_endpoints)}] "
+       f"and {len(_requesters)} agent identit(ies).")
 else:
+    reason = ("no agent identity could be resolved" if not _requesters
+              else "system usage table not readable yet")
     warn(
-        "System usage table not readable yet; creating empty typed shells "
-        "(they populate once traffic flows and you have system-table access)."
+        f"{reason.capitalize()}; creating empty typed shells (they populate "
+        "once traffic flows and you have system-table access)."
     )
     base = _EMPTY_USAGE_BASE
 
