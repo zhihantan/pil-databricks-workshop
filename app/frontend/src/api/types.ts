@@ -64,6 +64,16 @@ export interface ExtractedInvoice {
   queued_for_review: boolean;
 }
 
+export interface ProcessedInvoice {
+  source_file: string;
+  invoice_no: string | null;
+  customer_name: string | null;
+  currency: string | null;
+  total: number | null;
+  exception_type: string | null;
+  extracted_at: string | null;
+}
+
 export interface HealthResponse {
   status: "ok" | "degraded";
   lakebase: boolean;

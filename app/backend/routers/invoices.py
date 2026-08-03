@@ -14,6 +14,7 @@ from backend.models.schemas import (
     ExtractedInvoice,
     InvoiceDecisionRequest,
     InvoiceQueueItem,
+    ProcessedInvoice,
 )
 from backend.services.extraction_service import ExtractionService
 from backend.services.invoice_service import InvoiceService
@@ -31,6 +32,15 @@ def list_queue(
 ) -> list[InvoiceQueueItem]:
     """List the invoice review queue, optionally filtered by status."""
     return svc.list_queue(status=status)
+
+
+@router.get("/extractions", response_model=list[ProcessedInvoice])
+def list_processed(
+    limit: int = 50,
+    svc: ExtractionService = Depends(get_extraction_service),
+) -> list[ProcessedInvoice]:
+    """Recently processed invoices (from the Delta sink), latest first, deduped."""
+    return [ProcessedInvoice(**r) for r in svc.list_recent(limit=limit)]
 
 
 @router.post("/upload", response_model=ExtractedInvoice)

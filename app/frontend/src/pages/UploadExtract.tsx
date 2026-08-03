@@ -1,6 +1,11 @@
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
-import type { ExtractedInvoice, ExtractionMetrics } from "../api/types";
+import type {
+  ExtractedInvoice,
+  ExtractionMetrics,
+  ProcessedInvoice,
+} from "../api/types";
 import { useToast } from "../components/Toast";
 import { currency, EmptyState, ExceptionBadge, PageHeader } from "../components/ui";
 
@@ -23,6 +28,28 @@ export function UploadExtract() {
   const [dragging, setDragging] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [running, setRunning] = useState(false);
+
+  // Right-side "processed invoices" list: seeded from the Delta sink, then
+  // live-prepended as each upload succeeds (dedup by source_file).
+  const seed = useQuery({ queryKey: ["processed"], queryFn: () => api.listProcessed(50) });
+  const [processed, setProcessed] = useState<ProcessedInvoice[]>([]);
+  useEffect(() => {
+    if (seed.data) setProcessed(seed.data);
+  }, [seed.data]);
+
+  const addProcessed = (r: ExtractedInvoice) =>
+    setProcessed((prev) => {
+      const row: ProcessedInvoice = {
+        source_file: r.file_name,
+        invoice_no: r.invoice_no,
+        customer_name: r.customer_name,
+        currency: r.currency,
+        total: r.total,
+        exception_type: r.exception_type,
+        extracted_at: new Date().toISOString(),
+      };
+      return [row, ...prev.filter((p) => p.source_file !== r.file_name)];
+    });
 
   const setJob = (id: string, patch: Partial<Job>) =>
     setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...patch } : j)));
@@ -69,6 +96,7 @@ export function UploadExtract() {
             result: data,
             ms: Math.round(performance.now() - t0),
           });
+          addProcessed(data);
         } catch (e) {
           failed++;
           setJob(job.id, {
@@ -106,73 +134,138 @@ export function UploadExtract() {
         subtitle="Drop one or many invoice PDFs. Each is saved to the pil_workshop volume, parsed with ai_parse_document, and extracted via ai_extract + a governed ai_query UC function into ~20 structured fields, line items, and an exception flag."
       />
 
-      <div
-        className={`dropzone${dragging ? " drag" : ""}`}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragging(false);
-          onPick(e.dataTransfer.files);
-        }}
-        role="button"
-        tabIndex={0}
-        onClick={() => !running && inputRef.current?.click()}
-        onKeyDown={(e) => {
-          if ((e.key === "Enter" || e.key === " ") && !running) inputRef.current?.click();
-        }}
-      >
-        <div className="dropzone-emoji">{running ? "⏳" : "🧾"}</div>
-        <div className="dropzone-title">
-          {running ? "Processing invoices…" : "Drop PDF invoices here"}
+      <div className="work-grid">
+        <div className="work-main">
+          <div
+            className={`dropzone${dragging ? " drag" : ""}`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              onPick(e.dataTransfer.files);
+            }}
+            role="button"
+            tabIndex={0}
+            onClick={() => !running && inputRef.current?.click()}
+            onKeyDown={(e) => {
+              if ((e.key === "Enter" || e.key === " ") && !running) inputRef.current?.click();
+            }}
+          >
+            <div className="dropzone-emoji">{running ? "⏳" : "🧾"}</div>
+            <div className="dropzone-title">
+              {running ? "Processing invoices…" : "Drop PDF invoices here"}
+            </div>
+            <p className="muted" style={{ margin: "6px 0 16px" }}>
+              one or many — or click to browse (up to {MAX_FILES})
+            </p>
+            <input
+              ref={inputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              multiple
+              style={{ display: "none" }}
+              onChange={(e) => onPick(e.target.files)}
+            />
+            <button
+              className="btn btn-primary"
+              disabled={running}
+              onClick={(e) => {
+                e.stopPropagation();
+                inputRef.current?.click();
+              }}
+            >
+              {running ? "Processing…" : "Choose PDF invoices"}
+            </button>
+          </div>
+
+          {/* Single file: keep the animated pipeline + rich result. */}
+          {single && single.status === "running" && <PipelineLoader fileName={single.name} />}
+          {single && single.result && <ResultView r={single.result} />}
+          {single && single.status === "error" && (
+            <div className="card">
+              <p className="muted" style={{ color: "var(--neg)" }}>
+                ⚠ {single.error}
+              </p>
+            </div>
+          )}
+
+          {/* Multiple files: batch progress list + summary. */}
+          {jobs.length > 1 && <BatchView jobs={jobs} running={running} />}
+
+          {jobs.length === 0 && (
+            <EmptyState
+              emoji="🧾"
+              text="Upload one or more invoices to see their structured extraction here."
+            />
+          )}
         </div>
-        <p className="muted" style={{ margin: "6px 0 16px" }}>
-          one or many — or click to browse (up to {MAX_FILES})
-        </p>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="application/pdf,.pdf"
-          multiple
-          style={{ display: "none" }}
-          onChange={(e) => onPick(e.target.files)}
-        />
-        <button
-          className="btn btn-primary"
-          disabled={running}
-          onClick={(e) => {
-            e.stopPropagation();
-            inputRef.current?.click();
-          }}
-        >
-          {running ? "Processing…" : "Choose PDF invoices"}
-        </button>
+
+        <ProcessedPanel items={processed} loading={seed.isLoading} />
       </div>
-
-      {/* Single file: keep the animated pipeline + rich result. */}
-      {single && single.status === "running" && <PipelineLoader fileName={single.name} />}
-      {single && single.result && <ResultView r={single.result} />}
-      {single && single.status === "error" && (
-        <div className="card">
-          <p className="muted" style={{ color: "var(--neg)" }}>
-            ⚠ {single.error}
-          </p>
-        </div>
-      )}
-
-      {/* Multiple files: batch progress list + summary. */}
-      {jobs.length > 1 && <BatchView jobs={jobs} running={running} />}
-
-      {jobs.length === 0 && (
-        <EmptyState
-          emoji="🧾"
-          text="Upload one or more invoices to see their structured extraction here."
-        />
-      )}
     </>
+  );
+}
+
+/* ---- Right-side "processed invoices" list ----------------------------- */
+function ProcessedPanel({
+  items,
+  loading,
+}: {
+  items: ProcessedInvoice[];
+  loading: boolean;
+}) {
+  return (
+    <aside className="work-aside">
+      <div className="card processed-card">
+        <h2 className="section-title">
+          Processed invoices{items.length ? ` (${items.length})` : ""}
+        </h2>
+        {loading && items.length === 0 ? (
+          <p className="muted" style={{ fontSize: 13 }}>
+            Loading…
+          </p>
+        ) : items.length === 0 ? (
+          <p className="muted" style={{ fontSize: 13 }}>
+            None yet — processed invoices will appear here.
+          </p>
+        ) : (
+          <ul className="processed-list">
+            {items.map((p) => (
+              <li key={p.source_file} className="processed-row">
+                <span
+                  className={`processed-dot${p.exception_type ? " flagged" : " ok"}`}
+                  title={p.exception_type ?? "clean"}
+                />
+                <span className="processed-body">
+                  <span className="processed-name" title={p.source_file}>
+                    {p.source_file}
+                  </span>
+                  <span className="processed-sub">
+                    {p.invoice_no ?? "—"}
+                    {p.total != null && (
+                      <>
+                        {" · "}
+                        {currency(p.total)} {p.currency ?? ""}
+                      </>
+                    )}
+                    {p.exception_type && (
+                      <>
+                        {" · "}
+                        <span className="save-warn">{p.exception_type}</span>
+                      </>
+                    )}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </aside>
   );
 }
 

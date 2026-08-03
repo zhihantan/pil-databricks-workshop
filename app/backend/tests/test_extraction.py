@@ -177,6 +177,33 @@ def test_persist_writes_parameterized_insert_row():
     assert json.loads(p["raw_json"])["invoice_no"] == "INV-9"
 
 
+def test_list_recent_maps_rows_and_coerces_total():
+    captured = {}
+
+    def _read(sql):
+        captured["sql"] = sql
+        return [
+            {"source_file": "a.pdf", "invoice_no": "INV-1", "customer_name": "Acme",
+             "currency": "USD", "total": "1,000.00", "exception_type": None,
+             "extracted_at": "2026-08-03 09:00:00"},
+            {"source_file": "b.pdf", "invoice_no": "INV-2", "customer_name": "X",
+             "currency": "SGD", "total": 4578.0, "exception_type": "missing_po",
+             "extracted_at": "2026-08-03 08:00:00"},
+        ]
+
+    svc = ExtractionService(read_fn=_read)
+    rows = svc.list_recent(limit=10)
+    assert len(rows) == 2
+    assert rows[0]["source_file"] == "a.pdf" and rows[0]["total"] == 1000.0
+    assert rows[1]["exception_type"] == "missing_po"
+    # dedup + ordering happen in SQL (window function + ORDER BY)
+    assert "ROW_NUMBER() OVER" in captured["sql"] and "LIMIT 10" in captured["sql"]
+
+
+def test_list_recent_empty_without_read_fn():
+    assert ExtractionService().list_recent() == []
+
+
 def test_persist_skipped_when_no_write_fn():
     wc = _FakeWC()
     flat = {"invoice_no": "INV-10", "currency": "USD", "total": "5.00"}

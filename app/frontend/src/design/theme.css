@@ -992,3 +992,80 @@ table.data tr:hover td {
   min-width: 38px;
   text-align: right;
 }
+
+/* ===== EXTRACTION: work layout + processed-invoices panel ======== */
+.work-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 1080px) {
+  .work-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.work-main {
+  min-width: 0;
+}
+.work-aside {
+  position: sticky;
+  top: 18px;
+}
+.processed-card {
+  max-height: calc(100vh - 120px);
+  overflow: auto;
+}
+.processed-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.processed-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px 6px;
+  border-radius: 8px;
+  transition: background 0.12s ease;
+}
+.processed-row:hover {
+  background: var(--surface-2);
+}
+.processed-row + .processed-row {
+  border-top: 1px solid var(--border);
+}
+.processed-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 6px;
+  flex: none;
+}
+.processed-dot.ok {
+  background: var(--pos);
+}
+.processed-dot.flagged {
+  background: var(--warn);
+}
+.processed-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.processed-name {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.processed-sub {
+  font-size: 11px;
+  color: var(--muted);
+}

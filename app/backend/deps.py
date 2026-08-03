@@ -25,11 +25,13 @@ def get_invoice_service() -> InvoiceService:
 def get_extraction_service() -> ExtractionService:
     # Strict SQL: extraction must surface real errors, not silently return [].
     # The FMAPI endpoint lives in the governed UC function, not here.
-    # write_fn persists each extraction to the Delta sink (best-effort).
+    # write_fn persists each extraction to the Delta sink (best-effort);
+    # read_fn is the graceful read for the processed-invoices list.
     return ExtractionService(
         workspace_client=workspace_client(),
         sql_fn=sql_query_strict,
         write_fn=sql_execute,
+        read_fn=sql_query,
     )
 
 

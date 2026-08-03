@@ -76,6 +76,18 @@ class ExtractedInvoice(BaseModel):
     queued_for_review: bool = False  # flagged → added to the Lakebase review queue
 
 
+class ProcessedInvoice(BaseModel):
+    """One row for the 'processed invoices' list (read from the Delta sink)."""
+
+    source_file: str
+    invoice_no: str | None = None
+    customer_name: str | None = None
+    currency: str | None = None
+    total: float | None = None
+    exception_type: str | None = None
+    extracted_at: str | None = None
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok", "degraded"] = "ok"
     lakebase: bool = Field(description="Whether Lakebase is reachable")

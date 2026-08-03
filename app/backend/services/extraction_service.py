@@ -37,10 +37,14 @@ class ExtractionService:
         workspace_client: Any = None,
         sql_fn: Any = None,
         write_fn: Any = None,
+        read_fn: Any = None,
     ) -> None:
         self._wc = workspace_client
         self._sql_fn = sql_fn
         self._write_fn = write_fn
+        # Graceful read (returns [] if the sink is empty/missing) for the
+        # "processed invoices" list; distinct from the strict extraction sql_fn.
+        self._read_fn = read_fn
 
     # ---- volume path helpers --------------------------------------------
     def _volume_path(self, file_name: str) -> str:
@@ -286,6 +290,53 @@ class ExtractionService:
         )
         self._write_fn(sql, {c: values.get(c) for c in col_names})
         return table
+
+    # ---- read back the processed list -----------------------------------
+    def list_recent(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Return recently processed invoices from the Delta sink (deduped).
+
+        Dedup by ``source_file`` keeping the latest row (the table is
+        append-only, so re-uploads add rows). Graceful: returns [] if the read
+        fn is missing or the table isn't there yet.
+        """
+        if not self._read_fn:
+            return []
+        from pil_workshop.agent_bricks import invoice_uploads_table
+
+        table = invoice_uploads_table(get_settings().catalog)
+        lim = max(1, min(int(limit), 200))
+        sql = f"""
+            WITH ranked AS (
+                SELECT source_file, invoice_no, customer_name, currency, total,
+                       exception_type, extracted_at,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY source_file ORDER BY extracted_at DESC
+                       ) AS rn
+                FROM {table}
+            )
+            SELECT source_file, invoice_no, customer_name, currency, total,
+                   exception_type, CAST(extracted_at AS STRING) AS extracted_at
+            FROM ranked WHERE rn = 1
+            ORDER BY extracted_at DESC LIMIT {lim}
+        """
+        try:
+            rows = list(self._read_fn(sql))
+        except Exception as exc:  # noqa: BLE001
+            LOG.warning("Recent-extractions read failed: %s", exc)
+            return []
+        return [
+            {
+                "source_file": r.get("source_file"),
+                "invoice_no": r.get("invoice_no"),
+                "customer_name": r.get("customer_name"),
+                "currency": r.get("currency"),
+                "total": _num(r.get("total")),
+                "exception_type": r.get("exception_type"),
+                "extracted_at": r.get("extracted_at"),
+            }
+            for r in rows
+            if isinstance(r, dict)
+        ]
 
     # ---- orchestration ---------------------------------------------------
     def process_upload(self, file_name: str, content: bytes) -> dict[str, Any]:

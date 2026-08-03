@@ -8,6 +8,7 @@ import type {
   InvoiceDecisionRequest,
   InvoiceQueueItem,
   KpiSummary,
+  ProcessedInvoice,
   UsageSummary,
   WorkOrderRequest,
 } from "./types";
@@ -37,6 +38,8 @@ export const api = {
 
   listInvoices: (status?: string) =>
     req<InvoiceQueueItem[]>(`/api/invoices${status ? `?status=${status}` : ""}`),
+  listProcessed: (limit = 50) =>
+    req<ProcessedInvoice[]>(`/api/invoices/extractions?limit=${limit}`),
   uploadInvoice: async (fileToUpload: File): Promise<ExtractedInvoice> => {
     const form = new FormData();
     form.append("file", fileToUpload);
