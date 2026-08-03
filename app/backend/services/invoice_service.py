@@ -133,6 +133,63 @@ class InvoiceService:
         demo_store.set_status(file_name, req.decision)
         return {"decision_id": None, "file_name": file_name, "decision": req.decision}
 
+    # ---- enqueue (from the upload flow) ---------------------------------
+    def enqueue_for_review(
+        self,
+        file_name: str,
+        invoice_no: str | None,
+        customer: str | None,
+        extracted_total: float | None,
+        exception_type: str | None,
+    ) -> str:
+        """Add a flagged extraction to the review queue (Lakebase, else demo).
+
+        Upsert keyed by ``file_name`` (UNIQUE) so re-uploading the same invoice
+        updates its row instead of duplicating. Best-effort: returns the backing
+        store used ("lakebase" | "memory"); callers should not fail on errors.
+        """
+        conn = self._conn_factory() if self._conn_factory else None
+        if conn is not None:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO pil_app.invoice_review_queue "
+                        "(file_name, invoice_no, customer, extracted_total, "
+                        " exception_type, status) "
+                        "VALUES (%s,%s,%s,%s,%s,'pending') "
+                        "ON CONFLICT (file_name) DO UPDATE SET "
+                        "  invoice_no=EXCLUDED.invoice_no, "
+                        "  customer=EXCLUDED.customer, "
+                        "  extracted_total=EXCLUDED.extracted_total, "
+                        "  exception_type=EXCLUDED.exception_type, "
+                        "  status='pending'",
+                        (file_name, invoice_no, customer, extracted_total, exception_type),
+                    )
+                    cur.execute(
+                        "INSERT INTO pil_app.app_audit_log (actor, action, entity) "
+                        "VALUES (%s,%s,%s)",
+                        ("app", f"invoice_enqueued_{exception_type or 'flagged'}", file_name),
+                    )
+                conn.commit()
+                return "lakebase"
+            except Exception as exc:  # noqa: BLE001
+                LOG.warning("Lakebase enqueue failed, using memory: %s", exc)
+            finally:
+                try:
+                    conn.close()
+                except Exception:  # noqa: BLE001
+                    pass
+        self._ensure_demo_seeded()
+        demo_store.upsert_queue_row({
+            "file_name": file_name,
+            "invoice_no": invoice_no,
+            "customer": customer,
+            "extracted_total": extracted_total,
+            "ground_truth_total": None,
+            "exception_type": exception_type,
+        })
+        return "memory"
+
 
 # A tiny static sample so the queue is never empty in a fresh demo.
 _SAMPLE_QUEUE: list[dict[str, Any]] = [

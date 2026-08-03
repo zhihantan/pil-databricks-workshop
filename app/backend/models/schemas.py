@@ -73,6 +73,7 @@ class ExtractedInvoice(BaseModel):
     exception_type: str | None = None
     metrics: ExtractionMetrics | None = None
     saved_table: str | None = None  # Delta table the row was persisted to
+    queued_for_review: bool = False  # flagged → added to the Lakebase review queue
 
 
 class HealthResponse(BaseModel):

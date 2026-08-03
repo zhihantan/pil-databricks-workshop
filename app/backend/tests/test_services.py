@@ -75,6 +75,56 @@ def test_invoice_decision_persists_across_fresh_service_instances():
     assert len(fresh.list_queue(status="rejected")) == 1
 
 
+def test_enqueue_for_review_demo_fallback_shows_in_queue():
+    from backend.services import demo_store
+
+    demo_store.reset()
+    svc = InvoiceService(conn_factory=None, sql_fn=_fake_sql([]))
+    backing = svc.enqueue_for_review(
+        file_name="up.pdf", invoice_no="INV-X", customer="Acme",
+        extracted_total=500.0, exception_type="missing_po")
+    assert backing == "memory"
+    # a fresh instance (next request) sees the flagged item pending
+    fresh = InvoiceService(conn_factory=None, sql_fn=_fake_sql([]))
+    pend = fresh.list_queue(status="pending")
+    assert any(i.file_name == "up.pdf" and i.exception_type == "missing_po" for i in pend)
+
+
+def test_enqueue_for_review_upserts_in_lakebase():
+    captured = []
+
+    class _Cur:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def execute(self, sql, params=None):
+            captured.append((sql, params))
+
+    class _Conn:
+        def cursor(self):
+            return _Cur()
+
+        def commit(self):
+            captured.append(("COMMIT", None))
+
+        def close(self):
+            pass
+
+    svc = InvoiceService(conn_factory=lambda: _Conn(), sql_fn=None)
+    backing = svc.enqueue_for_review(
+        file_name="up.pdf", invoice_no="INV-Y", customer="Z",
+        extracted_total=99.0, exception_type="total_mismatch")
+    assert backing == "lakebase"
+    sqls = " ".join(s for s, _ in captured)
+    # upsert keyed by file_name (no duplicates on re-upload) + audit log + commit
+    assert "ON CONFLICT (file_name) DO UPDATE" in sqls
+    assert "invoice_review_queue" in sqls and "app_audit_log" in sqls
+    assert ("COMMIT", None) in captured
+
+
 # --------------------------------------------------------------------------
 # InspectionService
 # --------------------------------------------------------------------------

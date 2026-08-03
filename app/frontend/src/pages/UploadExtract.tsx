@@ -66,8 +66,7 @@ export function UploadExtract() {
           {upload.isPending ? "Processing invoice…" : "Drop a PDF invoice here"}
         </div>
         <p className="muted" style={{ margin: "6px 0 16px" }}>
-          or click to browse — try the samples in{" "}
-          <code>~/Desktop/pil_invoice_samples</code>
+          or click to browse
         </p>
         <input
           ref={inputRef}
@@ -314,6 +313,12 @@ function RichResult({ r }: { r: ExtractedInvoice }) {
               <p className="muted" style={{ margin: "4px 0 0", fontSize: 12 }}>
                 <span className="save-warn">⚠</span> Not persisted to Delta (extraction
                 still returned).
+              </p>
+            )}
+            {r.queued_for_review && (
+              <p className="muted" style={{ margin: "4px 0 0", fontSize: 12 }}>
+                <span className="save-ok">✓ Review</span> flagged as{" "}
+                <code>{r.exception_type}</code> — added to the Lakebase review queue.
               </p>
             )}
           </div>

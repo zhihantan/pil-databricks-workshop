@@ -61,6 +61,7 @@ export interface ExtractedInvoice {
   exception_type: string | null;
   metrics: ExtractionMetrics | null;
   saved_table: string | null;
+  queued_for_review: boolean;
 }
 
 export interface HealthResponse {

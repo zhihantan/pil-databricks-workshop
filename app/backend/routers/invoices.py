@@ -37,9 +37,10 @@ def list_queue(
 async def upload_and_extract(
     file: UploadFile = File(...),
     svc: ExtractionService = Depends(get_extraction_service),
+    invoices: InvoiceService = Depends(get_invoice_service),
 ) -> ExtractedInvoice:
     """Upload a PDF invoice → save to the governed Volume → parse + extract →
-    return structured data (the Agent-Bricks-style pipeline, in the app).
+    persist to Delta → (if flagged) enqueue for human review → return data.
     """
     name = file.filename or "upload.pdf"
     if not name.lower().endswith(".pdf"):
@@ -57,6 +58,25 @@ async def upload_and_extract(
             detail=f"Extraction failed: {exc}. Ensure the app can write to the "
             "invoice Volume and query the governed FMAPI endpoint.",
         ) from exc
+
+    # Reverse-ETL loop: a flagged extraction goes to the Lakebase review queue
+    # (the operational/OLTP store) for a human decision. Best-effort — never
+    # fail the extraction response on an enqueue error.
+    if result.get("exception_type"):
+        try:
+            result["queued_for_review"] = invoices.enqueue_for_review(
+                file_name=result.get("file_name"),
+                invoice_no=result.get("invoice_no"),
+                customer=result.get("customer_name"),
+                extracted_total=result.get("total"),
+                exception_type=result.get("exception_type"),
+            ) is not None
+        except Exception as exc:  # noqa: BLE001
+            result["queued_for_review"] = False
+            # log-only; extraction already succeeded
+            import logging
+
+            logging.getLogger("backend.invoices").warning("enqueue failed: %s", exc)
     return ExtractedInvoice(**result)
 
 

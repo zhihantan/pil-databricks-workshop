@@ -57,6 +57,22 @@ def set_status(file_name: str, status: str) -> None:
             _QUEUE[file_name]["status"] = status
 
 
+def upsert_queue_row(row: dict[str, Any]) -> None:
+    """Insert or update one review-queue row keyed by file_name (idempotent)."""
+    global _QUEUE
+    with _LOCK:
+        if _QUEUE is None:
+            _QUEUE = {}
+        rec = copy.deepcopy(row)
+        rec.setdefault("status", "pending")
+        rec["id"] = (
+            _QUEUE[rec["file_name"]]["id"]
+            if rec["file_name"] in _QUEUE
+            else len(_QUEUE) + 1
+        )
+        _QUEUE[rec["file_name"]] = rec
+
+
 def pending_count() -> int:
     with _LOCK:
         return sum(1 for r in (_QUEUE or {}).values() if r.get("status") == "pending")
