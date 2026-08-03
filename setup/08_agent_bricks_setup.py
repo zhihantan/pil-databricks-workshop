@@ -42,7 +42,7 @@ _add_repo_src_to_path()
 
 from databricks.sdk import WorkspaceClient
 
-from pil_workshop import agent_bricks, config, llm
+from pil_workshop import agent_bricks, config, dbx_api, llm
 from pil_workshop.utils import banner, ok, safe_identifier, warn
 
 dbutils.widgets.text("catalog", config.DEFAULT_CATALOG, "Catalog name")
@@ -93,6 +93,40 @@ try:
     ok(f"Parsed {n_parsed} invoice PDFs → silver.invoice_parsed_text")
 except Exception as exc:  # noqa: BLE001
     warn(f"ai_parse_document step failed: {exc}")
+
+# COMMAND ----------
+
+# MAGIC %md #### Step 1b — register the governed extraction UC function
+# MAGIC Productionizes the `ai_query` extraction as a versioned, UC-permissioned
+# MAGIC function `default.extract_invoice_fields(doc_text) -> JSON`. The Databricks
+# MAGIC App calls this (parsing + `ai_extract` stay inline at the call site, since
+# MAGIC the parser needs a constant path and `ai_extract` can't compile in a
+# MAGIC function body). One extraction asset, reusable from the app, SQL, Genie,
+# MAGIC and notebooks. The endpoint is baked in at creation and refreshed each run.
+
+# COMMAND ----------
+
+try:
+    spark.sql(agent_bricks.build_invoice_extraction_function_ddl(CATALOG, endpoints.text))
+    ok(f"Registered UC function {agent_bricks.invoice_function_name(CATALOG)} "
+       f"(governed FMAPI {endpoints.text}).")
+    # Let the app's service principal call it (best-effort; ignore if the app
+    # isn't deployed yet or the grant already exists).
+    try:
+        app_sp = dbx_api.app_service_principal_id(config.APP_NAME, client=wc)
+        if app_sp:
+            spark.sql(
+                f"GRANT EXECUTE ON FUNCTION {agent_bricks.invoice_function_name(CATALOG)} "
+                f"TO `{app_sp}`"
+            )
+            ok(f"Granted EXECUTE on the extraction function to app SP {app_sp}.")
+        else:
+            warn("App SP not resolvable yet — grant EXECUTE after the app deploys "
+                 "(the daily run does this automatically).")
+    except Exception as gexc:  # noqa: BLE001
+        warn(f"Could not grant EXECUTE to the app SP (do it after deploy): {gexc}")
+except Exception as exc:  # noqa: BLE001
+    warn(f"Could not register the extraction UC function: {exc}")
 
 # COMMAND ----------
 

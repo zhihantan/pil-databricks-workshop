@@ -155,3 +155,37 @@ def test_build_serialized_space_minimal_tables_only():
     assert s["version"] == 2
     assert s["data_sources"]["tables"] == [{"identifier": "c.g.t"}]
     assert "instructions" not in s and "benchmarks" not in s
+
+
+def test_invoice_extraction_function_ddl_bakes_endpoint_and_name():
+    from pil_workshop import agent_bricks as ab
+
+    ddl = ab.build_invoice_extraction_function_ddl("pil_workshop", "databricks-claude-sonnet-4-5")
+    # references the governed function name (catalog-qualified, backticked catalog)
+    assert "`pil_workshop`.default.extract_invoice_fields" in ddl
+    assert "CREATE OR REPLACE FUNCTION" in ddl
+    assert "RETURNS STRING" in ddl
+    # endpoint is baked in (UC SQL fn can't resolve it at call time)
+    assert "ai_query(\n    'databricks-claude-sonnet-4-5'" in ddl
+    # asks for the shared nested schema keys
+    assert "line_items" in ddl and "payment_terms" in ddl
+
+
+def test_single_invoice_sql_calls_uc_function_not_inline_ai_query():
+    from pil_workshop import agent_bricks as ab
+
+    sql = ab.build_single_invoice_extraction_sql("pil_workshop", "/Volumes/pil_workshop/bronze/raw_invoices/x.pdf")
+    # parse + flat extract stay inline
+    assert "ai_parse_document" in sql
+    assert "ai_extract(text, array(" in sql
+    # nested extraction is delegated to the governed UC function (no inline ai_query)
+    assert "`pil_workshop`.default.extract_invoice_fields(text)" in sql
+    assert "ai_query(" not in sql
+    # returns the same two columns the app consumer expects
+    assert "AS flat" in sql and "AS nested_json" in sql
+
+
+def test_invoice_function_name_is_catalog_qualified():
+    from pil_workshop import agent_bricks as ab
+
+    assert ab.invoice_function_name("mycat") == "`mycat`.default.extract_invoice_fields"

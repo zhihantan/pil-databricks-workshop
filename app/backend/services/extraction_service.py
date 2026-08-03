@@ -27,19 +27,17 @@ _VOLUME_SUBPATH = "bronze/raw_invoices"
 class ExtractionService:
     """Save an uploaded invoice to the Volume and extract structured data.
 
-    ``workspace_client`` / ``sql_fn`` / ``text_endpoint`` are injected so the
-    service is unit-testable with fakes.
+    ``workspace_client`` / ``sql_fn`` are injected so the service is
+    unit-testable with fakes.
     """
 
     def __init__(
         self,
         workspace_client: Any = None,
         sql_fn: Any = None,
-        text_endpoint: str | None = None,
     ) -> None:
         self._wc = workspace_client
         self._sql_fn = sql_fn
-        self._text_endpoint = text_endpoint
 
     # ---- volume path helpers --------------------------------------------
     def _volume_path(self, file_name: str) -> str:
@@ -68,16 +66,23 @@ class ExtractionService:
 
     # ---- 2+3. extract + derive exception --------------------------------
     def extract(self, volume_path: str) -> dict[str, Any]:
-        """Run the scoped AI-function extraction on one file; return structured data."""
+        """Run the extraction on one file; return structured data.
+
+        Parses (``ai_parse_document``) and pulls flat fields (``ai_extract``)
+        inline, then delegates the nested/line-item extraction to the governed
+        UC function ``<catalog>.default.extract_invoice_fields``. The FMAPI
+        endpoint is baked into that function (created by setup), so the app no
+        longer passes an endpoint name here.
+        """
         from pil_workshop.agent_bricks import build_single_invoice_extraction_sql
 
-        if not self._sql_fn or not self._text_endpoint:
+        if not self._sql_fn:
             raise RuntimeError(
-                "Extraction needs a SQL warehouse and a governed FMAPI endpoint. "
-                "Grant the app CAN USE on a serverless warehouse and CAN QUERY "
-                "on the FMAPI text endpoint (see app.yaml)."
+                "Extraction needs a SQL warehouse. Grant the app CAN USE on a "
+                "serverless warehouse (see app.yaml)."
             )
-        sql = build_single_invoice_extraction_sql(self._text_endpoint, volume_path)
+        catalog = get_settings().catalog
+        sql = build_single_invoice_extraction_sql(catalog, volume_path)
         rows = list(self._sql_fn(sql))
         if not rows:
             raise RuntimeError("Extraction returned no rows (parse may have failed).")

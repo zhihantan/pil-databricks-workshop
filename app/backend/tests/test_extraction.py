@@ -71,7 +71,7 @@ def test_extract_clean_invoice_no_exception():
             "currency": "USD", "total": "1,000.00 USD"}
     nested = {"subtotal": 900.0, "tax": 100.0, "total": 1000.0,
               "line_items": [{"description": "Ocean Freight", "amount": 900.0}]}
-    svc = ExtractionService(sql_fn=_sql_fn_returning(flat, nested), text_endpoint="ep")
+    svc = ExtractionService(sql_fn=_sql_fn_returning(flat, nested))
     r = svc.extract("/Volumes/c/bronze/raw_invoices/a.pdf")
     assert r["invoice_no"] == "INV-1"
     assert r["total"] == 1000.0 and r["exception_type"] is None
@@ -82,7 +82,7 @@ def test_extract_flags_total_mismatch():
     flat = {"invoice_no": "INV-2", "customer": "X", "po_number": "PO2",
             "currency": "CNY", "total": "2,490.40 CNY"}
     nested = {"subtotal": 1753.38, "tax": 122.74, "total": 2490.4, "line_items": []}
-    svc = ExtractionService(sql_fn=_sql_fn_returning(flat, nested), text_endpoint="ep")
+    svc = ExtractionService(sql_fn=_sql_fn_returning(flat, nested))
     r = svc.extract("/Volumes/c/bronze/raw_invoices/b.pdf")
     # 2490.40 != 1753.38 + 122.74
     assert r["exception_type"] == "total_mismatch"
@@ -92,7 +92,7 @@ def test_extract_flags_missing_po_placeholder():
     flat = {"invoice_no": "INV-3", "customer": "Y", "po_number": "—",
             "currency": "USD", "total": "500.00"}
     nested = {"subtotal": 500.0, "tax": 0.0, "total": 500.0, "line_items": []}
-    svc = ExtractionService(sql_fn=_sql_fn_returning(flat, nested), text_endpoint="ep")
+    svc = ExtractionService(sql_fn=_sql_fn_returning(flat, nested))
     r = svc.extract("/Volumes/c/bronze/raw_invoices/c.pdf")
     assert r["po_number"] is None and r["exception_type"] == "missing_po"
 
@@ -103,7 +103,7 @@ def test_process_upload_saves_then_extracts():
             "currency": "USD", "total": "10.00"}
     nested = {"subtotal": 10.0, "tax": 0.0, "total": 10.0, "line_items": []}
     svc = ExtractionService(
-        workspace_client=wc, sql_fn=_sql_fn_returning(flat, nested), text_endpoint="ep"
+        workspace_client=wc, sql_fn=_sql_fn_returning(flat, nested)
     )
     r = svc.process_upload("d.pdf", b"%PDF bytes")
     assert r["invoice_no"] == "INV-4"

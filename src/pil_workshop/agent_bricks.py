@@ -109,6 +109,57 @@ VISION_USER_PROMPT = (
 # Flat labels ai_extract pulls directly from the parsed text.
 _EXTRACT_LABELS = ("invoice_no", "customer", "po_number", "currency", "total")
 
+# The single instruction string used by the nested ai_query extraction, shared
+# by the batch pipeline, the app query, and the governed UC function so all three
+# ask the model for the exact same JSON shape.
+_NESTED_INSTRUCTION = (
+    "Extract this freight invoice as JSON with keys: invoice_no, date, "
+    "customer, po_number, currency, line_items (array of objects with "
+    "description and amount), subtotal, tax, total, payment_terms. "
+    "Return ONLY JSON."
+)
+
+# Fully-qualified name of the governed UC function that wraps the nested
+# ai_query extraction. Created by setup (notebook 08) and called by the app so
+# the extraction "intelligence" is a versioned, UC-permissioned, reusable asset.
+INVOICE_EXTRACT_FUNCTION = "default.extract_invoice_fields"
+
+
+def invoice_function_name(catalog: str) -> str:
+    """Fully-qualified name of the governed invoice-extraction UC function."""
+    return f"`{catalog}`.{INVOICE_EXTRACT_FUNCTION}"
+
+
+def build_invoice_extraction_function_ddl(catalog: str, text_endpoint: str) -> str:
+    """Return DDL for the governed invoice-extraction UC function.
+
+    Wraps the nested ``ai_query`` call (the LLM "intelligence", and the part that
+    hits the governed FMAPI endpoint) as a reusable, UC-permissioned function
+    ``<catalog>.default.extract_invoice_fields(doc_text) -> STRING`` (JSON).
+
+    The endpoint name is baked in at creation because a UC SQL function can't
+    call the SDK to resolve it; setup recreates the function each run, so it
+    self-heals if the resolved endpoint changes. ``ai_parse_document`` and
+    ``ai_extract`` are intentionally NOT wrapped — the parser needs a constant
+    ``READ_FILES`` path and ``ai_extract`` cannot compile inside a function body
+    (its label array is rejected as non-constant); both stay inline at the call
+    site.
+    """
+    endpoint = text_endpoint.replace("'", "''")
+    instruction = _NESTED_INSTRUCTION.replace("'", "''")
+    return f"""
+CREATE OR REPLACE FUNCTION {invoice_function_name(catalog)}(doc_text STRING)
+RETURNS STRING
+COMMENT 'PIL freight-invoice extraction via governed FMAPI ({endpoint}). '
+        'Input: parsed invoice text. Output: JSON with invoice_no, date, '
+        'customer, po_number, currency, line_items[], subtotal, tax, total, '
+        'payment_terms.'
+RETURN ai_query(
+    '{endpoint}',
+    CONCAT('{instruction}\\n\\nTEXT:\\n', doc_text)
+)
+""".strip()
+
 
 def build_invoice_parse_sql(catalog: str, invoices_volume_path: str) -> str:
     """Return SQL that parses invoice PDFs to readable text with ai_parse_document.
@@ -161,14 +212,11 @@ WITH flat AS (
 ),
 nested AS (
     -- ai_query: the nested schema (line_items, subtotal, tax) ai_extract can't do.
+    -- Same instruction as the governed UC function so batch and app agree.
     SELECT file_name,
            ai_query(
                '{text_endpoint}',
-               CONCAT(
-                   'Extract this freight invoice as JSON with keys: invoice_no, ',
-                   'date, customer, po_number, currency, line_items (array of ',
-                   'objects with description and amount), subtotal, tax, total, ',
-                   'payment_terms. Return ONLY JSON.\\n\\nTEXT:\\n', text)
+               CONCAT('{_NESTED_INSTRUCTION}\\n\\nTEXT:\\n', text)
            ) AS raw_json
     FROM `{catalog}`.`silver`.`invoice_parsed_text`
 ),
@@ -204,16 +252,23 @@ JOIN nested_clean nc ON fl.file_name = nc.file_name
 """.strip()
 
 
-def build_single_invoice_extraction_sql(text_endpoint: str, file_path: str) -> str:
+def build_single_invoice_extraction_sql(catalog: str, file_path: str) -> str:
     """Return SQL that extracts ONE invoice PDF at ``file_path`` in a single row.
 
-    Used by the app's upload flow: parse + ai_extract (flat) + ai_query (nested),
-    scoped to one file. Returns columns: invoice_no, customer, po_number,
-    currency, flat_total, nested_json (raw model JSON — caller strips/parses).
+    Used by the app's upload flow. Parses the PDF (``ai_parse_document``) and
+    pulls flat header fields (``ai_extract``) inline — both must stay inline
+    (parser needs a constant path; ``ai_extract`` can't compile in a UC
+    function) — then delegates the nested/line-item extraction to the governed
+    UC function ``<catalog>.default.extract_invoice_fields`` so the app and the
+    batch pipeline share one versioned, permissioned extraction asset.
+
+    Returns columns ``flat`` (struct) and ``nested_json`` (raw model JSON —
+    caller strips/parses), unchanged from before, so the consumer is unaffected.
     """
     # Escape single quotes in the path defensively (paths are server-controlled,
     # but keep this robust).
     safe_path = file_path.replace("'", "''")
+    labels = ", ".join(f"'{lbl}'" for lbl in _EXTRACT_LABELS)
     return f"""
 WITH parsed AS (
     SELECT array_join(
@@ -224,15 +279,8 @@ WITH parsed AS (
     FROM READ_FILES('{safe_path}', format => 'binaryFile')
 )
 SELECT
-    ai_extract(text, array('invoice_no','customer','po_number','currency','total')) AS flat,
-    ai_query(
-        '{text_endpoint}',
-        CONCAT(
-            'Extract this freight invoice as JSON with keys: invoice_no, date, ',
-            'customer, po_number, currency, line_items (array of objects with ',
-            'description and amount), subtotal, tax, total, payment_terms. ',
-            'Return ONLY JSON.\\n\\nTEXT:\\n', text)
-    ) AS nested_json
+    ai_extract(text, array({labels})) AS flat,
+    {invoice_function_name(catalog)}(text) AS nested_json
 FROM parsed
 """.strip()
 
