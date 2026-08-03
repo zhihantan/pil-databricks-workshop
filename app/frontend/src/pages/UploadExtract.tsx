@@ -1,44 +1,109 @@
-import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import type { ExtractedInvoice, ExtractionMetrics } from "../api/types";
 import { useToast } from "../components/Toast";
 import { currency, EmptyState, ExceptionBadge, PageHeader } from "../components/ui";
 
+const MAX_FILES = 20;
+const CONCURRENCY = 3;
+
+type JobStatus = "queued" | "running" | "done" | "error" | "flagged";
+interface Job {
+  id: string;
+  name: string;
+  status: JobStatus;
+  result?: ExtractedInvoice;
+  error?: string;
+  ms?: number;
+}
+
 export function UploadExtract() {
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [result, setResult] = useState<ExtractedInvoice | null>(null);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [running, setRunning] = useState(false);
 
-  const upload = useMutation({
-    mutationFn: (f: File) => api.uploadInvoice(f),
-    onSuccess: (data) => {
-      setResult(data);
+  const setJob = (id: string, patch: Partial<Job>) =>
+    setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...patch } : j)));
+
+  // Single-file rich view is kept when exactly one file was processed.
+  const single = jobs.length === 1 ? jobs[0] : null;
+
+  const runBatch = async (fileList: File[]) => {
+    const pdfs = fileList.filter((f) => f.name.toLowerCase().endsWith(".pdf"));
+    const skipped = fileList.length - pdfs.length;
+    if (skipped > 0)
+      toast.push(`${skipped} non-PDF file(s) skipped — only PDFs are supported.`, "info");
+    if (pdfs.length === 0) return;
+    if (pdfs.length > MAX_FILES) {
+      toast.push(`Limit is ${MAX_FILES} files per batch; taking the first ${MAX_FILES}.`, "info");
+    }
+    const batch = pdfs.slice(0, MAX_FILES);
+    const queued: Job[] = batch.map((f, i) => ({
+      id: `${Date.now()}-${i}-${f.name}`,
+      name: f.name,
+      status: "queued",
+    }));
+    setJobs(queued);
+    setRunning(true);
+
+    // Fan out with a small concurrency limit (worker pool over a shared cursor).
+    // Tally outcomes locally so the summary toast doesn't depend on React state
+    // having flushed by the time the batch finishes.
+    let cursor = 0;
+    let flagged = 0;
+    let failed = 0;
+    const worker = async () => {
+      while (cursor < batch.length) {
+        const idx = cursor++;
+        const job = queued[idx];
+        const f = batch[idx];
+        setJob(job.id, { status: "running" });
+        const t0 = performance.now();
+        try {
+          const data = await api.uploadInvoice(f);
+          if (data.exception_type) flagged++;
+          setJob(job.id, {
+            status: data.exception_type ? "flagged" : "done",
+            result: data,
+            ms: Math.round(performance.now() - t0),
+          });
+        } catch (e) {
+          failed++;
+          setJob(job.id, {
+            status: "error",
+            error: (e as Error).message,
+            ms: Math.round(performance.now() - t0),
+          });
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, batch.length) }, worker));
+    setRunning(false);
+    if (batch.length === 1) {
       toast.push(
-        data.exception_type
-          ? `Extracted — flagged: ${data.exception_type}`
-          : "Extracted successfully",
-        data.exception_type ? "info" : "success",
+        flagged ? "Extracted — flagged for review" : failed ? "Extraction failed" : "Extraction complete",
+        flagged ? "info" : failed ? "error" : "success",
       );
-    },
-    onError: (e: Error) => toast.push(e.message, "error"),
-  });
+    } else {
+      toast.push(
+        `Processed ${batch.length} invoices · ${flagged} flagged · ${failed} failed`,
+        failed ? "error" : flagged ? "info" : "success",
+      );
+    }
+  };
 
   const onPick = (files: FileList | null) => {
-    const f = files?.[0];
-    if (!f) return;
-    setFileName(f.name);
-    setResult(null);
-    upload.mutate(f);
+    if (!files || files.length === 0) return;
+    void runBatch(Array.from(files));
   };
 
   return (
     <>
       <PageHeader
         title="Invoice Processing Agent"
-        subtitle="Drop an invoice PDF. It's saved to the pil_workshop volume, parsed with ai_parse_document, and extracted via ai_extract + a governed ai_query UC function into ~20 structured fields, line items, and an exception flag."
+        subtitle="Drop one or many invoice PDFs. Each is saved to the pil_workshop volume, parsed with ai_parse_document, and extracted via ai_extract + a governed ai_query UC function into ~20 structured fields, line items, and an exception flag."
       />
 
       <div
@@ -55,55 +120,129 @@ export function UploadExtract() {
         }}
         role="button"
         tabIndex={0}
-        onClick={() => !upload.isPending && inputRef.current?.click()}
+        onClick={() => !running && inputRef.current?.click()}
         onKeyDown={(e) => {
-          if ((e.key === "Enter" || e.key === " ") && !upload.isPending)
-            inputRef.current?.click();
+          if ((e.key === "Enter" || e.key === " ") && !running) inputRef.current?.click();
         }}
       >
-        <div className="dropzone-emoji">{upload.isPending ? "⏳" : "🧾"}</div>
+        <div className="dropzone-emoji">{running ? "⏳" : "🧾"}</div>
         <div className="dropzone-title">
-          {upload.isPending ? "Processing invoice…" : "Drop a PDF invoice here"}
+          {running ? "Processing invoices…" : "Drop PDF invoices here"}
         </div>
         <p className="muted" style={{ margin: "6px 0 16px" }}>
-          or click to browse
+          one or many — or click to browse (up to {MAX_FILES})
         </p>
         <input
           ref={inputRef}
           type="file"
           accept="application/pdf,.pdf"
+          multiple
           style={{ display: "none" }}
           onChange={(e) => onPick(e.target.files)}
         />
         <button
           className="btn btn-primary"
-          disabled={upload.isPending}
+          disabled={running}
           onClick={(e) => {
             e.stopPropagation();
             inputRef.current?.click();
           }}
         >
-          {upload.isPending ? "Processing…" : "Choose a PDF invoice"}
+          {running ? "Processing…" : "Choose PDF invoices"}
         </button>
-        {fileName && (
-          <p className="muted" style={{ marginTop: 12 }}>
-            {upload.isPending ? "Working on: " : "Last file: "}
-            <strong>{fileName}</strong>
-          </p>
-        )}
       </div>
 
-      {upload.isPending && <PipelineLoader fileName={fileName} />}
+      {/* Single file: keep the animated pipeline + rich result. */}
+      {single && single.status === "running" && <PipelineLoader fileName={single.name} />}
+      {single && single.result && <ResultView r={single.result} />}
+      {single && single.status === "error" && (
+        <div className="card">
+          <p className="muted" style={{ color: "var(--neg)" }}>
+            ⚠ {single.error}
+          </p>
+        </div>
+      )}
 
-      {!upload.isPending && result && <ResultView r={result} />}
+      {/* Multiple files: batch progress list + summary. */}
+      {jobs.length > 1 && <BatchView jobs={jobs} running={running} />}
 
-      {!upload.isPending && !result && (
+      {jobs.length === 0 && (
         <EmptyState
           emoji="🧾"
-          text="Upload an invoice to see its structured extraction here."
+          text="Upload one or more invoices to see their structured extraction here."
         />
       )}
     </>
+  );
+}
+
+/* ---- Bulk: summary strip + per-file progress list --------------------- */
+function BatchView({ jobs, running }: { jobs: Job[]; running: boolean }) {
+  const done = jobs.filter((j) => j.status === "done").length;
+  const flagged = jobs.filter((j) => j.status === "flagged").length;
+  const failed = jobs.filter((j) => j.status === "error").length;
+  const finished = done + flagged + failed;
+  const times = jobs.filter((j) => j.ms).map((j) => j.ms as number);
+  const avg = times.length ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : 0;
+
+  return (
+    <>
+      <div className="metrics-bar">
+        <Stat val={`${finished}/${jobs.length}`} lbl="Processed" />
+        <Stat val={String(done)} lbl="Clean" />
+        <Stat val={String(flagged)} lbl="Flagged" />
+        <Stat val={String(failed)} lbl="Failed" />
+        <Stat val={avg ? `${(avg / 1000).toFixed(1)}s` : "—"} lbl="Avg / file" />
+      </div>
+
+      <div className="card">
+        <h2 className="section-title">
+          {running ? "Processing invoices…" : "Batch results"} ({jobs.length})
+        </h2>
+        <div className="batch-list">
+          {jobs.map((j) => (
+            <div key={j.id} className={`batch-row batch-${j.status}`}>
+              <span className="batch-ico">{statusIcon(j.status)}</span>
+              <span className="batch-name" title={j.name}>
+                {j.name}
+              </span>
+              <span className="batch-meta">
+                {j.result?.invoice_no ? <code>{j.result.invoice_no}</code> : null}
+                {j.result?.total != null && (
+                  <span className="muted">
+                    {currency(j.result.total)} {j.result.currency ?? ""}
+                  </span>
+                )}
+                {j.status === "flagged" && <ExceptionBadge type={j.result?.exception_type ?? null} />}
+                {j.status === "error" && <span className="save-warn">⚠ {j.error}</span>}
+                {j.ms ? <span className="muted batch-time">{(j.ms / 1000).toFixed(1)}s</span> : null}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function statusIcon(s: JobStatus): string {
+  return s === "done"
+    ? "✓"
+    : s === "flagged"
+      ? "⚑"
+      : s === "error"
+        ? "⚠"
+        : s === "running"
+          ? "⏳"
+          : "•";
+}
+
+function Stat({ val, lbl }: { val: string; lbl: string }) {
+  return (
+    <div className="metric">
+      <span className="metric-val">{val}</span>
+      <span className="metric-lbl">{lbl}</span>
+    </div>
   );
 }
 

@@ -926,3 +926,69 @@ table.data tr:hover td {
   color: var(--warn);
   font-weight: 700;
 }
+
+/* ===== EXTRACTION: bulk batch list ============================== */
+.batch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.batch-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  transition: border-color 0.15s ease;
+}
+.batch-row.batch-running {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+.batch-row.batch-done {
+  border-left: 3px solid var(--pos);
+}
+.batch-row.batch-flagged {
+  border-left: 3px solid var(--warn);
+}
+.batch-row.batch-error {
+  border-left: 3px solid var(--neg);
+}
+.batch-ico {
+  width: 22px;
+  text-align: center;
+  font-weight: 700;
+  flex: none;
+}
+.batch-row.batch-done .batch-ico {
+  color: var(--pos);
+}
+.batch-row.batch-flagged .batch-ico {
+  color: var(--warn);
+}
+.batch-row.batch-error .batch-ico {
+  color: var(--neg);
+}
+.batch-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 550;
+}
+.batch-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  font-size: 12px;
+}
+.batch-time {
+  font-variant-numeric: tabular-nums;
+  min-width: 38px;
+  text-align: right;
+}
