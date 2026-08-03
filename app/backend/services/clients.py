@@ -117,34 +117,46 @@ def resolve_warehouse_id() -> str | None:
 
 
 @lru_cache
-def sql_connection_params() -> tuple[str, str, str] | None:
-    """Return (host, http_path, token) for the SQL connector, or None."""
+def sql_connection_target() -> tuple[str, str] | None:
+    """Return the STABLE (host, http_path) for the SQL connector, or None.
+
+    Deliberately excludes the auth token: the app's OAuth (oauth-m2m) token is
+    short-lived (~1h), so it must be resolved fresh per connection (see
+    ``_run_sql``). Caching only the host + warehouse path is safe and avoids the
+    403-after-token-expiry bug that a cached token caused.
+    """
     wc = workspace_client()
     warehouse_id = resolve_warehouse_id()
     if wc is None or not warehouse_id:
         return None
     try:
         host = wc.config.host
-        token = _bearer_token(wc)
-        if not token:
-            LOG.warning("No bearer token available for SQL connector.")
-            return None
         http_path = f"/sql/1.0/warehouses/{warehouse_id}"
-        return host, http_path, token
+        return host, http_path
     except Exception as exc:  # noqa: BLE001
-        LOG.warning("SQL connection params unavailable: %s", exc)
+        LOG.warning("SQL connection target unavailable: %s", exc)
         return None
 
 
 def _run_sql(sql: str) -> list[dict[str, Any]]:
-    """Execute SQL via the Databricks SQL connector; raise on any failure."""
-    params = sql_connection_params()
-    if params is None:
+    """Execute SQL via the Databricks SQL connector; raise on any failure.
+
+    The access token is resolved FRESH on every call — never cached. The app's
+    OAuth (oauth-m2m) service-principal token is short-lived (~1h); a cached
+    token expires and every Thrift ``OpenSession`` then fails with
+    ``403 FORBIDDEN``. ``wc.config.authenticate()`` refreshes the underlying
+    OAuth token internally, so resolving per-call always yields a valid bearer.
+    """
+    target = sql_connection_target()
+    if target is None:
         raise RuntimeError(
             "No SQL warehouse connection. Grant the app CAN USE on a serverless "
             "warehouse and set PIL_WAREHOUSE_ID."
         )
-    host, http_path, token = params
+    host, http_path = target
+    token = _bearer_token(workspace_client())  # fresh every call — do not cache
+    if not token:
+        raise RuntimeError("No bearer token available for SQL connector.")
     from databricks import sql as dbsql
 
     with dbsql.connect(
