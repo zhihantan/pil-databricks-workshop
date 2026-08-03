@@ -63,42 +63,57 @@ export function InvoiceReview() {
       ) : (
         <div className="split">
           {/* Left: PDF preview */}
-          <div className="card">
-            <div className="preview-head">
-              <h2 className="section-title" style={{ margin: 0 }}>
-                Document preview
-              </h2>
-              {active?.pdf_preview_url && (
-                <a
-                  className="btn btn-ghost btn-sm"
-                  href={active.pdf_preview_url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  ↗ Open PDF
-                </a>
-              )}
-            </div>
+          <div className="card pdf-card">
             {active?.pdf_preview_url ? (
-              <object
-                key={active.file_name}
-                className="pdf-frame"
-                data={active.pdf_preview_url}
-                type="application/pdf"
-              >
-                <div className="empty">
-                  <div className="empty-emoji">📄</div>
-                  <p>
-                    Your browser can't render PDFs inline —{" "}
-                    <a href={active.pdf_preview_url} target="_blank" rel="noreferrer">
-                      open {active.file_name}
-                    </a>{" "}
-                    in a new tab.
-                  </p>
+              <div className="pdf-viewer">
+                <div className="pdf-toolbar">
+                  <span className="pdf-toolbar-file" title={active.file_name}>
+                    <span className="pdf-toolbar-ico">📄</span>
+                    {active.file_name}
+                  </span>
+                  <span className="pdf-toolbar-actions">
+                    <ExceptionBadge type={active.exception_type} />
+                    <a
+                      className="btn btn-ghost btn-sm"
+                      href={active.pdf_preview_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      ↗ Open
+                    </a>
+                  </span>
                 </div>
-              </object>
+                <div className="pdf-stage">
+                  <object
+                    key={active.file_name}
+                    className="pdf-frame"
+                    data={`${active.pdf_preview_url}#toolbar=1&view=FitH`}
+                    type="application/pdf"
+                  >
+                    <div className="pdf-fallback">
+                      <div className="empty-emoji">📄</div>
+                      <p className="muted">
+                        Your browser can't render PDFs inline.
+                      </p>
+                      <a
+                        className="btn btn-primary btn-sm"
+                        href={active.pdf_preview_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open {active.file_name}
+                      </a>
+                    </div>
+                  </object>
+                </div>
+              </div>
             ) : (
-              <EmptyState emoji="📄" text="Select an invoice to preview." />
+              <div className="pdf-empty">
+                <EmptyState
+                  emoji="📄"
+                  text="Select an invoice from the queue to preview its document."
+                />
+              </div>
             )}
           </div>
 

@@ -604,6 +604,74 @@ def app_service_principal_id(app_name: str, client: Any | None = None) -> str | 
     return None
 
 
+def grant_app_warehouse_and_endpoints(
+    app_sp: str,
+    warehouse_id: str | None,
+    endpoint_names: list[str] | None = None,
+    client: Any | None = None,
+) -> list[str]:
+    """Grant the app SP CAN_USE on a warehouse and CAN_QUERY on serving endpoints.
+
+    These are permission-API grants the SQL ``GRANT`` statement can't express
+    (catalog/volume grants are done via SQL in the notebook). Best-effort:
+    returns a list of human-readable outcome strings; never raises so setup
+    doesn't halt if a grant already exists or the API shape differs.
+    """
+    wc = _ws(client)
+    out: list[str] = []
+    # SQL warehouse: CAN_USE
+    if warehouse_id:
+        try:
+            from databricks.sdk.service.sql import (
+                WarehouseAccessControlRequest,
+                WarehousePermissionLevel,
+            )
+
+            wc.warehouses.update_permissions(
+                warehouse_id=warehouse_id,
+                access_control_list=[
+                    WarehouseAccessControlRequest(
+                        service_principal_name=app_sp,
+                        permission_level=WarehousePermissionLevel.CAN_USE,
+                    )
+                ],
+            )
+            out.append(f"warehouse {warehouse_id}: CAN_USE")
+        except Exception as exc:  # noqa: BLE001
+            out.append(f"warehouse grant skipped: {str(exc)[:80]}")
+    # Serving endpoints: CAN_QUERY. Built-in pay-per-token FMAPI endpoints
+    # (``databricks-*``) are queryable by all workspace principals by default and
+    # expose no permissionable id, so skip them — only custom endpoints need it.
+    for name in endpoint_names or []:
+        if name.startswith("databricks-"):
+            out.append(f"endpoint {name}: built-in (open to all; no grant needed)")
+            continue
+        try:
+            from databricks.sdk.service.serving import (
+                ServingEndpointAccessControlRequest,
+                ServingEndpointPermissionLevel,
+            )
+
+            ep = wc.serving_endpoints.get(name=name)
+            eid = getattr(ep, "id", None)
+            if not eid:
+                out.append(f"endpoint {name}: no permissionable id, skipped")
+                continue
+            wc.serving_endpoints.update_permissions(
+                serving_endpoint_id=eid,
+                access_control_list=[
+                    ServingEndpointAccessControlRequest(
+                        service_principal_name=app_sp,
+                        permission_level=ServingEndpointPermissionLevel.CAN_QUERY,
+                    )
+                ],
+            )
+            out.append(f"endpoint {name}: CAN_QUERY")
+        except Exception as exc:  # noqa: BLE001
+            out.append(f"endpoint {name} grant skipped: {str(exc)[:80]}")
+    return out
+
+
 # ===========================================================================
 # Model serving for MLflow models (Phase 5)
 # ===========================================================================

@@ -37,7 +37,7 @@ REPO_ROOT = _add_repo_src_to_path()
 
 from databricks.sdk import WorkspaceClient
 
-from pil_workshop import config, dbx_api
+from pil_workshop import config, dbx_api, llm
 from pil_workshop.utils import banner, ok, safe_identifier, warn
 
 dbutils.widgets.text("catalog", config.DEFAULT_CATALOG, "Catalog name")
@@ -46,6 +46,8 @@ CATALOG = safe_identifier(dbutils.widgets.get("catalog") or config.DEFAULT_CATAL
 APP_NAME = dbutils.widgets.get("app_name") or "pil-invoice-vision"
 
 wc = WorkspaceClient()
+# Same endpoints the app calls — used below to grant the app SP CAN QUERY.
+resolved = llm.resolve_endpoints(wc, region=config.REGION)
 banner(f"10 · Deploying app '{APP_NAME}'")
 
 # COMMAND ----------
@@ -115,10 +117,52 @@ except Exception as exc:  # noqa: BLE001
 
 # COMMAND ----------
 
-# MAGIC %md ### Reminder — resource grants
-# MAGIC The app appears on Dashboard **Page 4** only once its service principal can
-# MAGIC query the governed endpoints (so its tokens are logged alongside notebook
-# MAGIC traffic). Grant the resources in `app/app.yaml` before the demo.
+# MAGIC %md ### Grant the app's service principal everything it needs (automated)
+# MAGIC A fresh customer run wires ALL the grants the app requires so it works with
+# MAGIC no manual clicks — the same set this repo debugged live:
+# MAGIC   * UC (via SQL): USE CATALOG, USE SCHEMA, SELECT, EXECUTE, READ VOLUME on
+# MAGIC     the catalog + WRITE VOLUME on `bronze.raw_invoices` (upload target);
+# MAGIC   * SQL warehouse: CAN USE (SDK); FMAPI text+vision endpoints: CAN QUERY (SDK).
+# MAGIC The app's SP only exists after it is created above, so grants run here.
+
+# COMMAND ----------
+
+app_sp = dbx_api.app_service_principal_id(APP_NAME, client=wc)
+if not app_sp:
+    warn(f"App '{APP_NAME}' SP not resolvable yet; re-run this notebook once the "
+         "app has finished provisioning to apply grants (the daily Job does this).")
+else:
+    ok(f"App service principal: {app_sp}")
+    # 1) Unity Catalog grants (SQL). Catalog-scope read cascades to schemas/tables/
+    #    volumes/functions; WRITE VOLUME is scoped to the invoice upload target.
+    uc_grants = [
+        f"GRANT USE CATALOG, USE SCHEMA, SELECT, EXECUTE, READ VOLUME "
+        f"ON CATALOG `{CATALOG}` TO `{app_sp}`",
+        f"GRANT WRITE VOLUME ON VOLUME `{CATALOG}`.`bronze`.`raw_invoices` TO `{app_sp}`",
+    ]
+    for stmt in uc_grants:
+        try:
+            spark.sql(stmt)
+            ok(f"  {stmt.split(' ON ')[0].replace('GRANT ', '')} ✓")
+        except Exception as gexc:  # noqa: BLE001
+            warn(f"  grant skipped ({stmt[:40]}…): {gexc}")
+    # 2) Warehouse CAN USE + endpoint CAN QUERY (permission API, not SQL).
+    try:
+        wid = dbx_api.get_serverless_warehouse_id(client=wc)
+    except Exception:  # noqa: BLE001
+        wid = None
+    endpoints_to_grant = sorted({resolved.text, resolved.vision})
+    for line in dbx_api.grant_app_warehouse_and_endpoints(
+        app_sp, wid, endpoints_to_grant, client=wc
+    ):
+        ok(f"  {line}")
+
+# COMMAND ----------
+
+# MAGIC %md ### Lakebase reminder
+# MAGIC The one grant not automated here is **CAN CONNECT on the Lakebase instance**
+# MAGIC (`pil-workshop-db`) — grant it in the Lakebase UI so the app's review queue /
+# MAGIC decisions persist to Postgres. The app still runs (UC-only) without it.
 
 # COMMAND ----------
 

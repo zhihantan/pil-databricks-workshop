@@ -44,3 +44,4 @@ setup/mlflow.db
 app/frontend/vite.config.js
 app/frontend/vite.config.d.ts
 *.tsbuildinfo
+uv.lock
