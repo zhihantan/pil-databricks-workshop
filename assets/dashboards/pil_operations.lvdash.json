@@ -220,6 +220,52 @@
       "layout": [
         {
           "widget": {
+            "name": "flt_region",
+            "queries": [
+              {
+                "name": "pil_filter_flt_region_ds_port_perf_region",
+                "query": {
+                  "datasetName": "ds_port_perf",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    },
+                    {
+                      "name": "region_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "region",
+                    "queryName": "pil_filter_flt_region_ds_port_perf_region"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Region"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
             "name": "c_reliability",
             "queries": [
               {
@@ -253,7 +299,7 @@
           },
           "position": {
             "x": 0,
-            "y": 0,
+            "y": 1,
             "width": 2,
             "height": 3
           }
@@ -293,7 +339,7 @@
           },
           "position": {
             "x": 2,
-            "y": 0,
+            "y": 1,
             "width": 2,
             "height": 3
           }
@@ -333,7 +379,7 @@
           },
           "position": {
             "x": 4,
-            "y": 0,
+            "y": 1,
             "width": 2,
             "height": 3
           }
@@ -387,7 +433,7 @@
           },
           "position": {
             "x": 0,
-            "y": 3,
+            "y": 4,
             "width": 6,
             "height": 5
           }
@@ -452,7 +498,7 @@
           },
           "position": {
             "x": 0,
-            "y": 8,
+            "y": 9,
             "width": 3,
             "height": 5
           }
@@ -554,7 +600,7 @@
           },
           "position": {
             "x": 3,
-            "y": 8,
+            "y": 9,
             "width": 3,
             "height": 5
           }
@@ -566,6 +612,98 @@
       "name": "page_commercial",
       "displayName": "Commercial",
       "layout": [
+        {
+          "widget": {
+            "name": "flt_industry",
+            "queries": [
+              {
+                "name": "pil_filter_flt_industry_ds_customer_rev_industry",
+                "query": {
+                  "datasetName": "ds_customer_rev",
+                  "fields": [
+                    {
+                      "name": "industry",
+                      "expression": "`industry`"
+                    },
+                    {
+                      "name": "industry_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "industry",
+                    "queryName": "pil_filter_flt_industry_ds_customer_rev_industry"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Industry"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "flt_ctype",
+            "queries": [
+              {
+                "name": "pil_filter_flt_ctype_ds_customer_rev_customer_type",
+                "query": {
+                  "datasetName": "ds_customer_rev",
+                  "fields": [
+                    {
+                      "name": "customer_type",
+                      "expression": "`customer_type`"
+                    },
+                    {
+                      "name": "customer_type_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "customer_type",
+                    "queryName": "pil_filter_flt_ctype_ds_customer_rev_customer_type"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Customer type"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
         {
           "widget": {
             "name": "l_rev_teu",
@@ -615,7 +753,7 @@
           },
           "position": {
             "x": 0,
-            "y": 0,
+            "y": 1,
             "width": 3,
             "height": 5
           }
@@ -669,7 +807,7 @@
           },
           "position": {
             "x": 3,
-            "y": 0,
+            "y": 1,
             "width": 3,
             "height": 5
           }
@@ -731,7 +869,7 @@
           },
           "position": {
             "x": 0,
-            "y": 5,
+            "y": 6,
             "width": 3,
             "height": 5
           }
@@ -832,7 +970,7 @@
           },
           "position": {
             "x": 3,
-            "y": 5,
+            "y": 6,
             "width": 3,
             "height": 5
           }
@@ -844,6 +982,98 @@
       "name": "page_sustainability",
       "displayName": "Sustainability",
       "layout": [
+        {
+          "widget": {
+            "name": "flt_vclass",
+            "queries": [
+              {
+                "name": "pil_filter_flt_vclass_ds_sustainability_vessel_class",
+                "query": {
+                  "datasetName": "ds_sustainability",
+                  "fields": [
+                    {
+                      "name": "vessel_class",
+                      "expression": "`vessel_class`"
+                    },
+                    {
+                      "name": "vessel_class_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "vessel_class",
+                    "queryName": "pil_filter_flt_vclass_ds_sustainability_vessel_class"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Vessel class"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "flt_fuel",
+            "queries": [
+              {
+                "name": "pil_filter_flt_fuel_ds_sustainability_fuel_type",
+                "query": {
+                  "datasetName": "ds_sustainability",
+                  "fields": [
+                    {
+                      "name": "fuel_type",
+                      "expression": "`fuel_type`"
+                    },
+                    {
+                      "name": "fuel_type_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "fuel_type",
+                    "queryName": "pil_filter_flt_fuel_ds_sustainability_fuel_type"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Fuel type"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
         {
           "widget": {
             "name": "l_fuel_eff",
@@ -904,7 +1134,7 @@
           },
           "position": {
             "x": 0,
-            "y": 0,
+            "y": 1,
             "width": 6,
             "height": 5
           }
@@ -966,7 +1196,7 @@
           },
           "position": {
             "x": 0,
-            "y": 5,
+            "y": 6,
             "width": 3,
             "height": 5
           }
@@ -1028,7 +1258,7 @@
           },
           "position": {
             "x": 3,
-            "y": 5,
+            "y": 6,
             "width": 3,
             "height": 5
           }

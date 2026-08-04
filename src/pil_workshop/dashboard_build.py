@@ -317,6 +317,42 @@ def _date_filter(
     }
 
 
+def _multi_filter(name: str, title: str, dataset: str, field: str) -> dict[str, Any]:
+    """A tab-scoped multi-select filter on one categorical column.
+
+    Same structure as a known-good ``filter-multi-select``: a query exposing the
+    field + its ``COUNT_IF(associative_filter_predicate_group)`` associativity
+    field, and an encoding linking the field to that query. Placed on a canvas
+    page, it filters the widgets that read the same dataset.
+    """
+    qname = f"pil_filter_{name}_{dataset}_{field}"
+    return {
+        "name": name,
+        "queries": [
+            {
+                "name": qname,
+                "query": {
+                    "datasetName": dataset,
+                    "fields": [
+                        {"name": field, "expression": f"`{field}`"},
+                        {
+                            "name": f"{field}_associativity",
+                            "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                        },
+                    ],
+                    "disaggregated": False,
+                },
+            }
+        ],
+        "spec": {
+            "version": 2,
+            "widgetType": "filter-multi-select",
+            "encodings": {"fields": [{"fieldName": field, "queryName": qname}]},
+            "frame": {"showTitle": True, "title": title},
+        },
+    }
+
+
 def _global_filters_page(bindings: list[tuple[str, str]]) -> dict[str, Any]:
     """A dashboard-wide 'Global filters' page (Lakeview left-panel).
 
@@ -356,6 +392,13 @@ def _place(widget: dict[str, Any], x: int, y: int, w: int, h: int) -> dict[str, 
 # ---------------------------------------------------------------------------
 def _page_ops() -> dict[str, Any]:
     layout = [
+        _place(
+            _multi_filter("flt_region", "Region", "ds_port_perf", "region"),
+            0,
+            0,
+            2,
+            1,
+        ),
         _place(
             _counter(
                 "c_reliability",
@@ -439,6 +482,20 @@ def _page_ops() -> dict[str, Any]:
 def _page_commercial() -> dict[str, Any]:
     layout = [
         _place(
+            _multi_filter("flt_industry", "Industry", "ds_customer_rev", "industry"),
+            0,
+            0,
+            2,
+            1,
+        ),
+        _place(
+            _multi_filter("flt_ctype", "Customer type", "ds_customer_rev", "customer_type"),
+            2,
+            0,
+            2,
+            1,
+        ),
+        _place(
             _line(
                 "l_rev_teu",
                 "ds_revenue_month",
@@ -501,6 +558,20 @@ def _page_commercial() -> dict[str, Any]:
 
 def _page_sustainability() -> dict[str, Any]:
     layout = [
+        _place(
+            _multi_filter("flt_vclass", "Vessel class", "ds_sustainability", "vessel_class"),
+            0,
+            0,
+            2,
+            1,
+        ),
+        _place(
+            _multi_filter("flt_fuel", "Fuel type", "ds_sustainability", "fuel_type"),
+            2,
+            0,
+            2,
+            1,
+        ),
         _place(
             _line(
                 "l_fuel_eff",
