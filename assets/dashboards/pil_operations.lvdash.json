@@ -78,25 +78,6 @@
       "layout": [
         {
           "widget": {
-            "name": "ops_hdr",
-            "spec": {
-              "version": 1,
-              "widgetType": "text",
-              "spec": {
-                "text": "## \ud83d\udea2 Fleet & Network Operations\nDeep navy `#0B1F3A` \u00b7 ocean teal `#0E7C86` \u00b7 signal amber `#F5A623`"
-              }
-            },
-            "textbox_spec": "## \ud83d\udea2 Fleet & Network Operations\nDeep navy `#0B1F3A` \u00b7 ocean teal `#0E7C86` \u00b7 signal amber `#F5A623`"
-          },
-          "position": {
-            "x": 0,
-            "y": 0,
-            "width": 6,
-            "height": 1
-          }
-        },
-        {
-          "widget": {
             "name": "c_reliability",
             "queries": [
               {
@@ -130,7 +111,7 @@
           },
           "position": {
             "x": 0,
-            "y": 1,
+            "y": 0,
             "width": 2,
             "height": 2
           }
@@ -170,7 +151,7 @@
           },
           "position": {
             "x": 2,
-            "y": 1,
+            "y": 0,
             "width": 2,
             "height": 2
           }
@@ -210,7 +191,7 @@
           },
           "position": {
             "x": 4,
-            "y": 1,
+            "y": 0,
             "width": 2,
             "height": 2
           }
@@ -264,7 +245,7 @@
           },
           "position": {
             "x": 0,
-            "y": 3,
+            "y": 2,
             "width": 6,
             "height": 3
           }
@@ -320,7 +301,7 @@
           },
           "position": {
             "x": 0,
-            "y": 6,
+            "y": 5,
             "width": 3,
             "height": 3
           }
@@ -394,7 +375,7 @@
           },
           "position": {
             "x": 3,
-            "y": 6,
+            "y": 5,
             "width": 3,
             "height": 3
           }
@@ -405,25 +386,6 @@
       "name": "page_commercial",
       "displayName": "Commercial",
       "layout": [
-        {
-          "widget": {
-            "name": "com_hdr",
-            "spec": {
-              "version": 1,
-              "widgetType": "text",
-              "spec": {
-                "text": "## \ud83d\udcb0 Commercial"
-              }
-            },
-            "textbox_spec": "## \ud83d\udcb0 Commercial"
-          },
-          "position": {
-            "x": 0,
-            "y": 0,
-            "width": 6,
-            "height": 1
-          }
-        },
         {
           "widget": {
             "name": "l_rev_teu",
@@ -473,7 +435,7 @@
           },
           "position": {
             "x": 0,
-            "y": 1,
+            "y": 0,
             "width": 3,
             "height": 3
           }
@@ -527,7 +489,7 @@
           },
           "position": {
             "x": 3,
-            "y": 1,
+            "y": 0,
             "width": 3,
             "height": 3
           }
@@ -581,7 +543,7 @@
           },
           "position": {
             "x": 0,
-            "y": 4,
+            "y": 3,
             "width": 3,
             "height": 3
           }
@@ -655,7 +617,7 @@
           },
           "position": {
             "x": 3,
-            "y": 4,
+            "y": 3,
             "width": 3,
             "height": 3
           }
@@ -666,25 +628,6 @@
       "name": "page_sustainability",
       "displayName": "Sustainability",
       "layout": [
-        {
-          "widget": {
-            "name": "sus_hdr",
-            "spec": {
-              "version": 1,
-              "widgetType": "text",
-              "spec": {
-                "text": "## \ud83c\udf31 Sustainability (IMO CII flavor)"
-              }
-            },
-            "textbox_spec": "## \ud83c\udf31 Sustainability (IMO CII flavor)"
-          },
-          "position": {
-            "x": 0,
-            "y": 0,
-            "width": 6,
-            "height": 1
-          }
-        },
         {
           "widget": {
             "name": "l_fuel_eff",
@@ -745,7 +688,7 @@
           },
           "position": {
             "x": 0,
-            "y": 1,
+            "y": 0,
             "width": 6,
             "height": 3
           }
@@ -799,7 +742,7 @@
           },
           "position": {
             "x": 0,
-            "y": 4,
+            "y": 3,
             "width": 3,
             "height": 3
           }
@@ -853,7 +796,7 @@
           },
           "position": {
             "x": 3,
-            "y": 4,
+            "y": 3,
             "width": 3,
             "height": 3
           }
@@ -864,25 +807,6 @@
       "name": "page_ai_governance",
       "displayName": "AI Usage & Governance",
       "layout": [
-        {
-          "widget": {
-            "name": "ai_hdr",
-            "spec": {
-              "version": 1,
-              "widgetType": "text",
-              "spec": {
-                "text": "## \ud83e\udd16 AI Usage & Governance\nLive Unity AI Gateway usage \u2014 populates as participants run Part 2."
-              }
-            },
-            "textbox_spec": "## \ud83e\udd16 AI Usage & Governance\nLive Unity AI Gateway usage \u2014 populates as participants run Part 2."
-          },
-          "position": {
-            "x": 0,
-            "y": 0,
-            "width": 6,
-            "height": 1
-          }
-        },
         {
           "widget": {
             "name": "c_tokens",
@@ -918,7 +842,7 @@
           },
           "position": {
             "x": 0,
-            "y": 1,
+            "y": 0,
             "width": 2,
             "height": 2
           }
@@ -958,7 +882,7 @@
           },
           "position": {
             "x": 2,
-            "y": 1,
+            "y": 0,
             "width": 2,
             "height": 2
           }
@@ -998,7 +922,7 @@
           },
           "position": {
             "x": 4,
-            "y": 1,
+            "y": 0,
             "width": 2,
             "height": 2
           }
@@ -1052,7 +976,7 @@
           },
           "position": {
             "x": 0,
-            "y": 3,
+            "y": 2,
             "width": 3,
             "height": 3
           }
@@ -1106,7 +1030,7 @@
           },
           "position": {
             "x": 3,
-            "y": 3,
+            "y": 2,
             "width": 3,
             "height": 3
           }
@@ -1180,7 +1104,7 @@
           },
           "position": {
             "x": 0,
-            "y": 6,
+            "y": 5,
             "width": 3,
             "height": 3
           }
@@ -1238,7 +1162,7 @@
           },
           "position": {
             "x": 3,
-            "y": 6,
+            "y": 5,
             "width": 3,
             "height": 3
           }

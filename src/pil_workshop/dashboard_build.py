@@ -594,6 +594,35 @@ def _page_ai_governance() -> dict[str, Any]:
     }
 
 
+def _strip_text_and_compact(page: dict[str, Any]) -> dict[str, Any]:
+    """Drop empty text/header widgets and compact the layout upward.
+
+    The markdown text-header widgets render as blank strips (the tab name
+    already serves as the heading), so they're removed. Any vertical gap they
+    leave is closed by shifting every row up so the real visualizations reclaim
+    the space and fill the page cleanly.
+    """
+    kept = [
+        it
+        for it in page["layout"]
+        if it["widget"].get("spec", {}).get("widgetType") != "text"
+    ]
+    # Compact y: map the sorted distinct y-values to 0,1,2,... preserving each
+    # widget's own height/relative order (row bands stay grouped).
+    ys = sorted({it["position"]["y"] for it in kept})
+    # Build new starting-y per original band by stacking heights of the tallest
+    # widget in each band.
+    new_y = 0
+    y_to_new: dict[int, int] = {}
+    for y in ys:
+        y_to_new[y] = new_y
+        band_h = max(it["position"]["height"] for it in kept if it["position"]["y"] == y)
+        new_y += band_h
+    for it in kept:
+        it["position"]["y"] = y_to_new[it["position"]["y"]]
+    return {**page, "layout": kept}
+
+
 def build_dashboard(catalog: str = "${catalog}") -> dict[str, Any]:
     """Return the full serialized dashboard dict for ``catalog``."""
     datasets = []
@@ -605,14 +634,16 @@ def build_dashboard(catalog: str = "${catalog}") -> dict[str, Any]:
                 "queryLines": [ds["query"].replace("${catalog}", catalog)],
             }
         )
+    pages = [
+        _page_ops(),
+        _page_commercial(),
+        _page_sustainability(),
+        _page_ai_governance(),
+    ]
+    pages = [_strip_text_and_compact(p) for p in pages]
     return {
         "datasets": datasets,
-        "pages": [
-            _page_ops(),
-            _page_commercial(),
-            _page_sustainability(),
-            _page_ai_governance(),
-        ],
+        "pages": pages,
         "uiSettings": {"theme": {"colors": PALETTE_SEQUENCE}},
     }
 
