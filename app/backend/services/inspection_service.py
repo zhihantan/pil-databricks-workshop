@@ -176,16 +176,13 @@ class InspectionService:
             # Headroom for the verbose `reasoning` field + the classification
             # fields that follow it; 300 truncated the JSON before confidence/
             # recommended_action on longer real-photo descriptions.
-            max_tokens=500,
+            max_tokens=600,
             response_format={
                 "type": "json_schema",
                 "json_schema": {"name": "inspection", "schema": INSPECTION_SCHEMA},
             },
         )
-        try:
-            return json.loads(raw)
-        except (ValueError, TypeError):
-            return {"damage": "unknown", "raw": raw}
+        return _parse_inspection(raw)
 
     def save_and_analyze(
         self, file_name: str, content: bytes, endpoint: str, llm_module: Any
@@ -323,6 +320,53 @@ def _to_float(v: Any) -> float | None:
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+def _parse_inspection(raw: str) -> dict[str, Any]:
+    """Parse the vision model's JSON response, resiliently.
+
+    A long `reasoning` field can occasionally make the response hit the token
+    cap and truncate mid-JSON. Rather than surface null fields (or crash), try:
+      1. strict JSON parse (the normal case);
+      2. salvage the `damage`/`damage_type`/`recommended_action` values from a
+         truncated/partial object via regex;
+      3. fall back to a SAFE default — flag for manual inspection at low
+         confidence — so an unparseable response never silently "clears" a
+         container or blanks the UI.
+    """
+    import re
+
+    try:
+        obj = json.loads(raw)
+        if isinstance(obj, dict) and obj.get("damage") in _VALID_DAMAGE:
+            return obj
+    except (ValueError, TypeError):
+        obj = None
+
+    salvaged: dict[str, Any] = {}
+    if raw:
+        m = re.search(r'"damage"\s*:\s*"(none|minor|major)"', raw)
+        if m:
+            salvaged["damage"] = m.group(1)
+        m = re.search(r'"damage_type"\s*:\s*"([^"]+)"', raw)
+        if m:
+            salvaged["damage_type"] = m.group(1)
+        m = re.search(r'"confidence"\s*:\s*([0-9.]+)', raw)
+        if m:
+            salvaged["confidence"] = _to_float(m.group(1))
+        m = re.search(r'"recommended_action"\s*:\s*"([^"]+)"', raw)
+        if m:
+            salvaged["recommended_action"] = m.group(1)
+    if salvaged.get("damage") in _VALID_DAMAGE:
+        return salvaged
+
+    # Nothing usable — never clear or blank. Flag for a human.
+    return {
+        "damage": "none",
+        "damage_type": "other",
+        "confidence": 0.3,
+        "recommended_action": "Flag for manual inspection — analysis inconclusive",
+    }
 
 
 _SAMPLE_INSPECTIONS: list[dict[str, Any]] = [

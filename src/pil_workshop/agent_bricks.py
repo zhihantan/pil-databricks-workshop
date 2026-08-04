@@ -119,14 +119,27 @@ VISION_SYSTEM_PROMPT = (
     "slight door skew = minor; but MANY marks (roughly four or more blobs), "
     "large blobs, a dense field of brown patches, or the door panel dropped "
     "well below the container = major.\n\n"
-    "SEVERITY (either modality): none = clean, sound, aligned doors → 'release'. "
-    "minor = light/localized damage (a small dent, light surface rust, slight "
-    "door skew) → 'flag for manual inspection'. major = severe or extensive "
-    "damage (large or multiple dents, heavy/widespread rust, a badly caved-in "
-    "wall, door hanging open or far out of frame) → 'remove from service'. "
-    "A large caved-in or crumpled section is MAJOR even if the rest looks clean.\n"
+    "SEVERITY (either modality): none = clean/sound with at most normal wear "
+    "(fading, scuffs, light surface staining, a few small rust spots on a "
+    "structurally sound body) → 'release'. minor = light but real damage (a "
+    "small dent, a patch of surface rust/corrosion, slight door skew) → 'flag "
+    "for manual inspection'. major = severe or extensive damage that compromises "
+    "the container (large or multiple dents, heavy/widespread corrosion or "
+    "rust-through, a badly caved-in/crumpled/torn wall, door hanging open or far "
+    "out of frame) → 'remove from service'. A large caved-in or crumpled section "
+    "is MAJOR even if the rest looks clean. Do NOT jump to 'major' for ordinary "
+    "weathering, faded paint, dirt, or an odd camera angle — reserve it for "
+    "clear structural damage.\n"
+    "NOT INSPECTABLE: if the image does not clearly show a single container's "
+    "exterior well enough to judge — e.g. an aerial/wide yard of many stacked "
+    "containers, a container interior, a drawing/diagram/illustration that isn't "
+    "our schematic, a heavily blurred/obstructed/partial view, or not a shipping "
+    "container at all — do NOT guess a severity. Return damage='none' with LOW "
+    "confidence (<= 0.4) and recommended_action='Flag for manual inspection — "
+    "image not clearly inspectable', and say why in 'reasoning'.\n"
     "First describe what you actually see in 'reasoning' (state whether it's a "
-    "photo or a diagram), then classify. Return only JSON matching the schema."
+    "photo, our schematic diagram, or not inspectable), then classify. Return "
+    "only JSON matching the schema."
 )
 
 VISION_USER_PROMPT = (
@@ -160,12 +173,55 @@ def image_media_type(data: bytes) -> str:
     return "image/jpeg"
 
 
+# The multimodal endpoint rejects a base64 image over 5 MB. base64 inflates
+# bytes ~33%, so the raw ceiling is ~3.7 MB — real phone photos routinely exceed
+# it. Downscale (and JPEG-recompress) oversized images before sending so a large
+# but valid photo isn't rejected. 4 MB base64 target leaves headroom.
+_ENDPOINT_B64_LIMIT = 5 * 1024 * 1024
+_B64_TARGET = 4 * 1024 * 1024
+
+
+def _maybe_downscale(data: bytes) -> tuple[bytes, str]:
+    """Return (bytes, media_type), shrinking the image if its base64 would exceed
+    the endpoint's 5 MB limit. Best-effort: if Pillow isn't available or the
+    re-encode fails, return the original bytes unchanged (the caller still tries
+    the send; only genuinely-oversized images without Pillow will fail)."""
+    media = image_media_type(data)
+    # base64 length ≈ 4/3 * bytes; only act when we'd exceed the limit.
+    if len(data) * 4 / 3 <= _ENDPOINT_B64_LIMIT:
+        return data, media
+    try:
+        import io
+        from PIL import Image
+
+        img = Image.open(io.BytesIO(data))
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        # Iteratively shrink dimensions + quality until under the base64 target.
+        max_dim = 2048
+        for _ in range(6):
+            work = img.copy()
+            work.thumbnail((max_dim, max_dim), Image.LANCZOS)
+            buf = io.BytesIO()
+            work.save(buf, format="JPEG", quality=85, optimize=True)
+            out = buf.getvalue()
+            if len(out) * 4 / 3 <= _B64_TARGET:
+                return out, "image/jpeg"
+            max_dim = int(max_dim * 0.8)
+        return out, "image/jpeg"  # best effort after the loop
+    except Exception:  # noqa: BLE001 - Pillow missing or decode failure
+        return data, media
+
+
 def image_data_url(data: bytes) -> str:
     """Return a base64 ``data:`` URL for an image, with the media type sniffed
-    from the bytes (see :func:`image_media_type`) so it always matches content."""
+    from the bytes (see :func:`image_media_type`) so it always matches content.
+    Oversized images are downscaled first so the endpoint's 5 MB base64 cap can't
+    reject an otherwise-valid photo."""
     import base64
 
-    return f"data:{image_media_type(data)};base64,{base64.b64encode(data).decode()}"
+    data, media = _maybe_downscale(data)
+    return f"data:{media};base64,{base64.b64encode(data).decode()}"
 
 
 # ---------------------------------------------------------------------------
@@ -674,7 +730,7 @@ def classify_container_images(
                 # 700 gives headroom for the verbose `reasoning` field plus the
                 # classification fields; 300 truncated the JSON on longer
                 # descriptions, yielding null damage/confidence.
-                messages, endpoint=vision_endpoint, max_tokens=500,
+                messages, endpoint=vision_endpoint, max_tokens=600,
                 response_format={
                     "type": "json_schema",
                     "json_schema": {"name": "inspection", "schema": INSPECTION_SCHEMA},

@@ -188,6 +188,35 @@ def test_refresh_one_uses_injected_llm():
     assert result["damage_type"] == "rust"
 
 
+def test_refresh_one_salvages_truncated_json():
+    """A long reasoning field can truncate the JSON mid-object; the damage label
+    must still be recovered rather than returning null fields to the UI."""
+    class FakeLLM:
+        def chat(self, messages, **kwargs):
+            # Valid up to damage/type, then cut off (no closing brace).
+            return ('{"reasoning":"This is a real photo with a large caved-in '
+                    'panel on the left side that' + "x" * 50 +
+                    '","damage":"major","damage_type":"dent","confid')
+
+    svc = InspectionService()
+    result = svc.refresh_one(b"fakebytes", "ep", FakeLLM())
+    assert result["damage"] == "major"  # salvaged from partial JSON
+    assert result["damage_type"] == "dent"
+
+
+def test_refresh_one_defaults_to_flag_when_unparseable():
+    """An unparseable/empty response must never silently clear a container:
+    default to a low-confidence 'flag for manual inspection'."""
+    class FakeLLM:
+        def chat(self, messages, **kwargs):
+            return "the model returned prose with no json at all"
+
+    svc = InspectionService()
+    result = svc.refresh_one(b"fakebytes", "ep", FakeLLM())
+    assert result["damage"] == "none" and result["confidence"] <= 0.4
+    assert "flag" in result["recommended_action"].lower()
+
+
 def test_refresh_one_declares_media_type_matching_the_bytes():
     """Regression: the endpoint rejects a declared media type that disagrees
     with the image content. The data URL must be sniffed from the bytes, not
