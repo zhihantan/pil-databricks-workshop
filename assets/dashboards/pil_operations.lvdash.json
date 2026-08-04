@@ -255,7 +255,7 @@
             "name": "s_port",
             "queries": [
               {
-                "name": "q_s_port",
+                "name": "main_query",
                 "query": {
                   "datasetName": "ds_port_perf",
                   "fields": [
@@ -282,14 +282,23 @@
               "encodings": {
                 "x": {
                   "fieldName": "avg_waiting_hrs",
+                  "scale": {
+                    "type": "quantitative"
+                  },
                   "displayName": "avg_waiting_hrs"
                 },
                 "y": {
                   "fieldName": "avg_turnaround_hrs",
+                  "scale": {
+                    "type": "quantitative"
+                  },
                   "displayName": "avg_turnaround_hrs"
                 },
                 "size": {
                   "fieldName": "total_crane_moves",
+                  "scale": {
+                    "type": "quantitative"
+                  },
                   "displayName": "total_crane_moves"
                 }
               },

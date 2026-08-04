@@ -222,11 +222,15 @@ def _bar(
 def _scatter(
     name: str, dataset: str, x: str, y: str, size: str, title: str
 ) -> dict[str, Any]:
+    # Verbatim structure of a known-good Lakeview scatter (Predictive
+    # Maintenance dashboard): version 3, disaggregated=true (raw points), and
+    # each x/y/size encoding carries a quantitative `scale`. Omitting the scale
+    # (my earlier "minimal" attempt) made the renderer not pick the axes.
     return {
         "name": name,
         "queries": [
             {
-                "name": f"q_{name}",
+                "name": "main_query",
                 "query": {
                     "datasetName": dataset,
                     "fields": [
@@ -242,9 +246,13 @@ def _scatter(
             "version": 3,
             "widgetType": "scatter",
             "encodings": {
-                "x": {"fieldName": x, "displayName": x},
-                "y": {"fieldName": y, "displayName": y},
-                "size": {"fieldName": size, "displayName": size},
+                "x": {"fieldName": x, "scale": {"type": "quantitative"}, "displayName": x},
+                "y": {"fieldName": y, "scale": {"type": "quantitative"}, "displayName": y},
+                "size": {
+                    "fieldName": size,
+                    "scale": {"type": "quantitative"},
+                    "displayName": size,
+                },
             },
             "frame": {"title": title, "showTitle": True},
         },
