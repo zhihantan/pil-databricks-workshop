@@ -72,8 +72,8 @@ INSPECTION_SCHEMA: dict[str, Any] = {
         # accuracy markedly on these schematic images).
         "reasoning": {
             "type": "string",
-            "description": "Briefly describe the marks/anomalies you see on the "
-            "container body and doors before classifying.",
+            "description": "Describe whether it's a photo or diagram and the "
+            "damage evidence you see on the body and doors before classifying.",
         },
         "damage": {"type": "string", "enum": ["none", "minor", "major"]},
         "damage_type": {
@@ -86,36 +86,50 @@ INSPECTION_SCHEMA: dict[str, Any] = {
     "required": ["reasoning", "damage", "damage_type", "confidence", "recommended_action"],
 }
 
-# These workshop images are SCHEMATIC side-view diagrams of a container (a
-# colored rectangle with vertical corrugation lines and a door panel on the
-# right), not photographs. Damage is drawn with a specific, consistent visual
-# vocabulary — the model scores far better when told what that vocabulary is,
-# because otherwise it dismisses the stylized marks as paint/shadow and returns
-# "none". Keep this description in lockstep with datagen `_draw_damage`.
+# The agent must handle BOTH real photographs of containers AND the workshop's
+# schematic diagram images. Describe real-world damage FIRST (what damage
+# physically is), then the schematic conventions as a second case — an
+# earlier schematic-only prompt hit 96% on the synthetic set but regressed real
+# photos (a caved-in wall = a dent, but not a "dark oval blob", so it returned
+# "none"). Keep the schematic descriptions in lockstep with datagen
+# `_draw_damage`.
 VISION_SYSTEM_PROMPT = (
-    "You are a container-inspection assistant reviewing SCHEMATIC diagram images "
-    "of shipping containers (a flat colored side view with vertical corrugation "
-    "lines and a door panel on the right edge) — treat any drawn mark as a real "
-    "defect, not paint or shadow. Damage is encoded like this:\n"
-    "• DENT: dark gray/black filled OVAL blobs on the container face (each blob "
-    "is a dent). A few small blobs = minor; many or large blobs = major.\n"
-    "• RUST: reddish-brown circular SPECKLES/patches scattered on the face. "
-    "Sparse light speckling = minor; dense or large brown patches = major.\n"
-    "• DOOR_MISALIGNMENT: a red/dark line or wedge at the right-hand door edge, "
-    "showing the door skewed out of alignment. Small skew = minor; large skew "
-    "extending past the container edge = major.\n"
-    "A container with NONE of these marks (clean face, aligned doors) is 'none'. "
-    "If you see ANY dent blob, rust speckle, or door skew, it is NOT 'none' — "
-    "choose minor or major by extent. First state what you see in 'reasoning', "
-    "then classify. Recommend an action: 'release' (none), 'flag for manual "
-    "inspection' (minor), or 'remove from service' (major). Return only JSON "
-    "matching the schema."
+    "You are a shipping-container damage inspector. The image is EITHER a real "
+    "photograph of a container OR a simplified schematic side-view diagram — "
+    "first decide which, then assess it for damage. Your job is to catch "
+    "structural damage; when in doubt, flag rather than clear.\n\n"
+    "In a REAL PHOTO, look for actual physical damage:\n"
+    "• DENT / deformation: caved-in, crumpled, bent, buckled, or punctured "
+    "panels; the wall pushed inward or torn open.\n"
+    "• RUST / corrosion: reddish-brown oxidation, flaking paint, corroded holes.\n"
+    "• DOOR_MISALIGNMENT: doors bent, sprung, off their hinges, or not sitting "
+    "flush in the frame.\n"
+    "• Other: holes, gouges, warping, or contents spilling out.\n"
+    "In a SCHEMATIC DIAGRAM (a flat colored rectangle with vertical corrugation "
+    "lines and a door panel on the right), damage is drawn as stylized marks — "
+    "treat any such mark as a real defect, not paint or shadow:\n"
+    "• DENT: dark gray/black filled OVAL blobs on the face (each blob = a dent).\n"
+    "• RUST: reddish-brown circular speckles/patches on the face.\n"
+    "• DOOR_MISALIGNMENT: a red/dark line or wedge at the right door edge, or the "
+    "door panel visibly dropped/skewed out of the frame.\n"
+    "In a diagram, even ONE small dark blob, a few brown speckles, or any door "
+    "skew means damage is present — it is NOT 'none' (a clean diagram has a "
+    "perfectly uniform face with no dark or brown marks at all).\n\n"
+    "SEVERITY (either modality): none = clean, sound, aligned doors → 'release'. "
+    "minor = light/localized damage (a small dent, light surface rust, slight "
+    "door skew) → 'flag for manual inspection'. major = severe or extensive "
+    "damage (large or multiple dents, heavy/widespread rust, a badly caved-in "
+    "wall, door hanging open or far out of frame) → 'remove from service'. "
+    "A large caved-in or crumpled section is MAJOR even if the rest looks clean.\n"
+    "First describe what you actually see in 'reasoning' (state whether it's a "
+    "photo or a diagram), then classify. Return only JSON matching the schema."
 )
 
 VISION_USER_PROMPT = (
-    "Inspect this container diagram. Look carefully across the whole face and the "
-    "right-hand doors for dark dent blobs, brown rust speckles, or a red door-skew "
-    "mark. Describe what you see in 'reasoning', then return JSON with damage "
+    "Inspect this shipping container for damage. First say whether it is a real "
+    "photo or a schematic diagram, then look carefully across the whole body and "
+    "the doors for dents/deformation, rust/corrosion, or door misalignment. "
+    "Describe what you see in 'reasoning', then return JSON with damage "
     "(none|minor|major), damage_type, confidence (0-1), and recommended_action."
 )
 
@@ -653,7 +667,10 @@ def classify_container_images(
         }
         try:
             raw = llm_module.chat(
-                messages, endpoint=vision_endpoint, max_tokens=300,
+                # 700 gives headroom for the verbose `reasoning` field plus the
+                # classification fields; 300 truncated the JSON on longer
+                # descriptions, yielding null damage/confidence.
+                messages, endpoint=vision_endpoint, max_tokens=500,
                 response_format={
                     "type": "json_schema",
                     "json_schema": {"name": "inspection", "schema": INSPECTION_SCHEMA},

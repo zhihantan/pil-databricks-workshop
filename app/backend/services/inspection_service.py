@@ -173,7 +173,10 @@ class InspectionService:
         raw = llm_module.chat(
             messages,
             endpoint=endpoint,
-            max_tokens=300,
+            # Headroom for the verbose `reasoning` field + the classification
+            # fields that follow it; 300 truncated the JSON before confidence/
+            # recommended_action on longer real-photo descriptions.
+            max_tokens=500,
             response_format={
                 "type": "json_schema",
                 "json_schema": {"name": "inspection", "schema": INSPECTION_SCHEMA},
