@@ -243,16 +243,10 @@
               "encodings": {
                 "x": {
                   "fieldName": "operations_date",
-                  "scale": {
-                    "type": "temporal"
-                  },
                   "displayName": "operations_date"
                 },
                 "y": {
                   "fieldName": "schedule_reliability_pct",
-                  "scale": {
-                    "type": "quantitative"
-                  },
                   "displayName": "schedule_reliability_pct"
                 }
               },
@@ -452,16 +446,10 @@
               "encodings": {
                 "x": {
                   "fieldName": "month",
-                  "scale": {
-                    "type": "temporal"
-                  },
                   "displayName": "month"
                 },
                 "y": {
                   "fieldName": "revenue_per_teu",
-                  "scale": {
-                    "type": "quantitative"
-                  },
                   "displayName": "revenue_per_teu"
                 }
               },
@@ -506,16 +494,10 @@
               "encodings": {
                 "x": {
                   "fieldName": "month",
-                  "scale": {
-                    "type": "temporal"
-                  },
                   "displayName": "month"
                 },
                 "y": {
                   "fieldName": "dd_revenue",
-                  "scale": {
-                    "type": "quantitative"
-                  },
                   "displayName": "dd_revenue"
                 }
               },
@@ -560,23 +542,11 @@
               "encodings": {
                 "x": {
                   "fieldName": "revenue_usd",
-                  "displayName": "trade_lane"
+                  "displayName": "revenue_usd"
                 },
                 "y": {
                   "fieldName": "trade_lane",
-                  "displayName": "revenue_usd"
-                },
-                "color": {
-                  "scale": {
-                    "colors": [
-                      "#0E7C86",
-                      "#F5A623",
-                      "#0B1F3A",
-                      "#5BB8B0",
-                      "#E4572E",
-                      "#5B6B7B"
-                    ]
-                  }
+                  "displayName": "trade_lane"
                 }
               },
               "frame": {
@@ -723,31 +693,15 @@
               "encodings": {
                 "x": {
                   "fieldName": "month",
-                  "scale": {
-                    "type": "temporal"
-                  },
                   "displayName": "month"
                 },
                 "y": {
                   "fieldName": "fuel_eff",
-                  "scale": {
-                    "type": "quantitative"
-                  },
                   "displayName": "fuel_eff"
                 },
                 "color": {
                   "fieldName": "vessel_class",
-                  "scale": {
-                    "type": "categorical",
-                    "colors": [
-                      "#0E7C86",
-                      "#F5A623",
-                      "#0B1F3A",
-                      "#5BB8B0",
-                      "#E4572E",
-                      "#5B6B7B"
-                    ]
-                  }
+                  "displayName": "vessel_class"
                 }
               },
               "frame": {
@@ -796,18 +750,6 @@
                 "y": {
                   "fieldName": "co2_per_teu_km",
                   "displayName": "co2_per_teu_km"
-                },
-                "color": {
-                  "scale": {
-                    "colors": [
-                      "#0E7C86",
-                      "#F5A623",
-                      "#0B1F3A",
-                      "#5BB8B0",
-                      "#E4572E",
-                      "#5B6B7B"
-                    ]
-                  }
                 }
               },
               "frame": {
@@ -856,18 +798,6 @@
                 "y": {
                   "fieldName": "fuel_eff",
                   "displayName": "fuel_eff"
-                },
-                "color": {
-                  "scale": {
-                    "colors": [
-                      "#0E7C86",
-                      "#F5A623",
-                      "#0B1F3A",
-                      "#5BB8B0",
-                      "#E4572E",
-                      "#5B6B7B"
-                    ]
-                  }
                 }
               },
               "frame": {
@@ -1056,16 +986,10 @@
               "encodings": {
                 "x": {
                   "fieldName": "usage_date",
-                  "scale": {
-                    "type": "temporal"
-                  },
                   "displayName": "usage_date"
                 },
                 "y": {
                   "fieldName": "total_tokens",
-                  "scale": {
-                    "type": "quantitative"
-                  },
                   "displayName": "total_tokens"
                 }
               },
@@ -1110,16 +1034,10 @@
               "encodings": {
                 "x": {
                   "fieldName": "usage_date",
-                  "scale": {
-                    "type": "temporal"
-                  },
                   "displayName": "usage_date"
                 },
                 "y": {
                   "fieldName": "error_count",
-                  "scale": {
-                    "type": "quantitative"
-                  },
                   "displayName": "error_count"
                 }
               },

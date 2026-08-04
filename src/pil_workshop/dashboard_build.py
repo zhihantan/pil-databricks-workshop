@@ -146,19 +146,16 @@ def _line(
         fields.append({"name": yy, "expression": f"`{yy}`"})
     if color_field:
         fields.append({"name": color_field, "expression": f"`{color_field}`"})
+    # Minimal encodings matching a known-good Lakeview chart: fieldName +
+    # displayName only. Embedding a `scale` object (temporal/quantitative) makes
+    # the renderer reject the axis ("no axes selected"), so it's omitted.
     encodings: dict[str, Any] = {
-        "x": {"fieldName": x, "scale": {"type": "temporal"}, "displayName": x},
-        "y": {
-            "fieldName": ys[0],
-            "scale": {"type": "quantitative"},
-            "displayName": ys[0],
-        },
+        "x": {"fieldName": x, "displayName": x},
+        "y": {"fieldName": ys[0], "displayName": ys[0]},
     }
     if color_field:
-        encodings["color"] = {
-            "fieldName": color_field,
-            "scale": {"type": "categorical", "colors": PALETTE_SEQUENCE},
-        }
+        # A color encoding is valid only WITH a fieldName (never a bare scale).
+        encodings["color"] = {"fieldName": color_field, "displayName": color_field}
     return {
         "name": name,
         "queries": [
@@ -201,11 +198,20 @@ def _bar(
         "spec": {
             "version": 3,
             "widgetType": "bar",
-            "encodings": {
-                "x": {"fieldName": x if not horizontal else y, "displayName": x},
-                "y": {"fieldName": y if not horizontal else x, "displayName": y},
-                "color": {"scale": {"colors": PALETTE_SEQUENCE}},
-            },
+            # Minimal encodings (fieldName + displayName). A `color` block with
+            # no fieldName is invalid and breaks the widget, so it's removed;
+            # displayName follows the field actually on that axis.
+            "encodings": (
+                {
+                    "x": {"fieldName": x, "displayName": x},
+                    "y": {"fieldName": y, "displayName": y},
+                }
+                if not horizontal
+                else {
+                    "x": {"fieldName": y, "displayName": y},
+                    "y": {"fieldName": x, "displayName": x},
+                }
+            ),
             "frame": {"title": title, "showTitle": True},
         },
     }
