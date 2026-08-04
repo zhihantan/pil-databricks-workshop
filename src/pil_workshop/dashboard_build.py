@@ -587,24 +587,41 @@ def _page_ai_governance() -> dict[str, Any]:
     }
 
 
+# Enlarged heights per widget type ("taller, same columns" sizing). Counters
+# stay compact-ish; charts/tables get noticeably bigger.
+_WIDGET_HEIGHT = {
+    "counter": 3,
+    "line": 5,
+    "bar": 5,
+    "scatter": 5,
+    "table": 5,
+    "pie": 5,
+    "heatmap": 5,
+}
+
+
 def _strip_text_and_compact(page: dict[str, Any]) -> dict[str, Any]:
-    """Drop empty text/header widgets and compact the layout upward.
+    """Drop empty text/header widgets, enlarge each widget, and re-stack rows.
 
     The markdown text-header widgets render as blank strips (the tab name
-    already serves as the heading), so they're removed. Any vertical gap they
-    leave is closed by shifting every row up so the real visualizations reclaim
-    the space and fill the page cleanly.
+    already serves as the heading), so they're removed. Each remaining widget's
+    height is bumped per ``_WIDGET_HEIGHT`` so the visualizations are larger, and
+    the ``y`` positions are recomputed band-by-band so nothing overlaps and there
+    are no gaps.
     """
     kept = [
         it
         for it in page["layout"]
         if it["widget"].get("spec", {}).get("widgetType") != "text"
     ]
-    # Compact y: map the sorted distinct y-values to 0,1,2,... preserving each
-    # widget's own height/relative order (row bands stay grouped).
+    # Enlarge heights by widget type (width/x are kept, so columns don't change).
+    for it in kept:
+        wt = it["widget"].get("spec", {}).get("widgetType")
+        if wt in _WIDGET_HEIGHT:
+            it["position"]["height"] = _WIDGET_HEIGHT[wt]
+    # Recompute y per row band (original y groups widgets into rows). Each band's
+    # new start = running total of prior bands' tallest widget.
     ys = sorted({it["position"]["y"] for it in kept})
-    # Build new starting-y per original band by stacking heights of the tallest
-    # widget in each band.
     new_y = 0
     y_to_new: dict[int, int] = {}
     for y in ys:
