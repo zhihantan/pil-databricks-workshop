@@ -1170,3 +1170,26 @@ table.data tr:hover td {
   color: var(--accent);
   margin-bottom: 4px;
 }
+
+/* ===== GATEWAY: usage refresh bar + delay note ================== */
+.usage-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.usage-note {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.usage-bar .btn-sm {
+  flex: none;
+  white-space: nowrap;
+}

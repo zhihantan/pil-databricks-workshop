@@ -14,6 +14,21 @@ export function Gateway() {
         subtitle="Every model call the agents make — invoice extraction and container analysis — is governed by Unity AI Gateway: rate-limited, usage-tracked, and audited. This is the same data on dashboard Page 4."
       />
 
+      <div className="usage-bar">
+        <p className="usage-note">
+          ⏱ Usage is sourced from Databricks system tables, which ingest with a
+          delay — newly-made calls typically appear here about <strong>30 minutes</strong>{" "}
+          after they happen.
+        </p>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => usage.refetch()}
+          disabled={usage.isFetching}
+        >
+          {usage.isFetching ? "Refreshing…" : "↻ Refresh"}
+        </button>
+      </div>
+
       {usage.isLoading ? (
         <div className="grid grid-3">
           {Array.from({ length: 3 }).map((_, i) => (
