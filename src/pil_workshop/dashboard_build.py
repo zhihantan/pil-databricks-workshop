@@ -259,12 +259,54 @@ def _scatter(
     }
 
 
-def _table(name: str, dataset: str, columns: list[str], title: str) -> dict[str, Any]:
+def _table_column(field: str, order: int, numeric: bool) -> dict[str, Any]:
+    """Full Lakeview table-column encoding (matches a known-good table widget).
+
+    A bare {fieldName, displayName} column does NOT render — Lakeview needs the
+    complete column descriptor (type/displayAs/visible/order/title/…).
+    """
+    col: dict[str, Any] = {
+        "fieldName": field,
+        "booleanValues": ["false", "true"],
+        "imageUrlTemplate": "{{ @ }}",
+        "imageTitleTemplate": "{{ @ }}",
+        "imageWidth": "",
+        "imageHeight": "",
+        "linkUrlTemplate": "{{ @ }}",
+        "linkTextTemplate": "{{ @ }}",
+        "linkTitleTemplate": "{{ @ }}",
+        "linkOpenInNewTab": True,
+        "type": "integer" if numeric else "string",
+        "displayAs": "number" if numeric else "string",
+        "visible": True,
+        "order": 100000 + order,
+        "title": field,
+        "allowSearch": False,
+        "alignContent": "right" if numeric else "left",
+        "allowHTML": False,
+        "highlightLinks": False,
+        "useMonospaceFont": False,
+        "preserveWhitespace": False,
+        "displayName": field,
+    }
+    if numeric:
+        col["numberFormat"] = "0.00"
+    return col
+
+
+def _table(
+    name: str,
+    dataset: str,
+    columns: list[str],
+    title: str,
+    numeric: set[str] | None = None,
+) -> dict[str, Any]:
+    numeric = numeric or set()
     return {
         "name": name,
         "queries": [
             {
-                "name": f"q_{name}",
+                "name": "main_query",
                 "query": {
                     "datasetName": dataset,
                     "fields": [{"name": c, "expression": f"`{c}`"} for c in columns],
@@ -276,7 +318,9 @@ def _table(name: str, dataset: str, columns: list[str], title: str) -> dict[str,
             "version": 1,
             "widgetType": "table",
             "encodings": {
-                "columns": [{"fieldName": c, "displayName": c} for c in columns]
+                "columns": [
+                    _table_column(c, i, c in numeric) for i, c in enumerate(columns)
+                ]
             },
             "frame": {"title": title, "showTitle": True},
         },
@@ -384,6 +428,7 @@ def _page_ops() -> dict[str, Any]:
                 "ds_port_perf",
                 ["port_name", "region", "avg_turnaround_hrs", "avg_waiting_hrs", "port_calls"],
                 "Worst-10 Ports by Turnaround",
+                numeric={"avg_turnaround_hrs", "avg_waiting_hrs", "port_calls"},
             ),
             3,
             6,
@@ -443,6 +488,7 @@ def _page_commercial() -> dict[str, Any]:
                 "ds_customer_rev",
                 ["customer_name", "customer_type", "industry", "freight_revenue_usd", "teu"],
                 "Top Customers by Revenue",
+                numeric={"freight_revenue_usd", "teu"},
             ),
             3,
             4,
@@ -576,6 +622,7 @@ def _page_ai_governance() -> dict[str, Any]:
                 "ds_ai_usage_endpoint",
                 ["endpoint", "request_count", "total_tokens", "error_count", "est_cost_usd"],
                 "Usage by Endpoint",
+                numeric={"request_count", "total_tokens", "error_count", "est_cost_usd"},
             ),
             0,
             6,
@@ -588,6 +635,7 @@ def _page_ai_governance() -> dict[str, Any]:
                 "ds_ai_usage_user",
                 ["user_name", "request_count", "total_tokens"],
                 "Usage by User",
+                numeric={"request_count", "total_tokens"},
             ),
             3,
             6,
