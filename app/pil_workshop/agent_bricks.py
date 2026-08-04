@@ -91,6 +91,36 @@ VISION_USER_PROMPT = (
     "damage_type, confidence (0-1), recommended_action."
 )
 
+# Image formats accepted by the multimodal FMAPI (and the app upload zone).
+_IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp")
+
+
+def image_media_type(data: bytes) -> str:
+    """Detect an image's media type from its magic bytes.
+
+    The multimodal endpoint validates the *declared* media type against the
+    actual image content and rejects a mismatch (e.g. a JPEG sent as
+    ``image/png``), so we must sniff the bytes — the file extension can lie.
+    Falls back to ``image/jpeg`` for unrecognized data (the common photo case).
+    """
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/jpeg"
+
+
+def image_data_url(data: bytes) -> str:
+    """Return a base64 ``data:`` URL for an image, with the media type sniffed
+    from the bytes (see :func:`image_media_type`) so it always matches content."""
+    import base64
+
+    return f"data:{image_media_type(data)};base64,{base64.b64encode(data).decode()}"
+
 
 # ---------------------------------------------------------------------------
 # SQL builders — the always-works AI-function pipeline. Endpoint name is injected
@@ -509,30 +539,29 @@ def classify_container_images(
     (e.g. from ``dbutils.fs.ls``); this avoids ``glob`` on the Volume FUSE mount,
     which is unreliable on serverless. When omitted, falls back to globbing.
     """
-    import base64
     import json as _json
     import os
 
     if file_names is not None:
         files = [os.path.join(image_dir, n) for n in sorted(file_names)
-                 if n.endswith(".png")]
+                 if n.lower().endswith(_IMAGE_EXTS)]
     else:
         import glob
-        files = sorted(glob.glob(os.path.join(image_dir, "*.png")))
+        files = sorted(f for f in glob.glob(os.path.join(image_dir, "*"))
+                       if f.lower().endswith(_IMAGE_EXTS))
     if limit:
         files = files[:limit]
     rows: list[dict[str, Any]] = []
     for path in files:
         with open(path, "rb") as fh:
-            b64 = base64.b64encode(fh.read()).decode()
+            data_url = image_data_url(fh.read())
         messages = [
             {"role": "system", "content": VISION_SYSTEM_PROMPT},
             {
                 "role": "user",
                 "content": [
                     {"type": "text", "text": VISION_USER_PROMPT},
-                    {"type": "image_url",
-                     "image_url": {"url": f"data:image/png;base64,{b64}"}},
+                    {"type": "image_url", "image_url": {"url": data_url}},
                 ],
             },
         ]

@@ -188,6 +188,27 @@ def test_refresh_one_uses_injected_llm():
     assert result["damage_type"] == "rust"
 
 
+def test_refresh_one_declares_media_type_matching_the_bytes():
+    """Regression: the endpoint rejects a declared media type that disagrees
+    with the image content. The data URL must be sniffed from the bytes, not
+    hardcoded to image/png (which 400'd on real JPEG uploads)."""
+    captured: dict = {}
+
+    class FakeLLM:
+        def chat(self, messages, **kwargs):
+            captured["url"] = messages[1]["content"][1]["image_url"]["url"]
+            return '{"damage":"none","damage_type":"none","confidence":0.9,' \
+                   '"recommended_action":"release"}'
+
+    svc = InspectionService()
+    # Minimal valid JPEG magic bytes.
+    svc.refresh_one(b"\xff\xd8\xff\xe0\x00\x10JFIF", "ep", FakeLLM())
+    assert captured["url"].startswith("data:image/jpeg;base64,")
+
+    svc.refresh_one(b"\x89PNG\r\n\x1a\n\x00\x00", "ep", FakeLLM())
+    assert captured["url"].startswith("data:image/png;base64,")
+
+
 def test_save_and_analyze_uploads_and_returns_metrics():
     class _FakeFiles:
         def __init__(self):

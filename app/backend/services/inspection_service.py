@@ -8,7 +8,6 @@ single-image "refresh" calls the governed multimodal endpoint through
 
 from __future__ import annotations
 
-import base64
 import json
 from typing import Any
 
@@ -108,17 +107,19 @@ class InspectionService:
             INSPECTION_SCHEMA,
             VISION_SYSTEM_PROMPT,
             VISION_USER_PROMPT,
+            image_data_url,
         )
 
-        b64 = base64.b64encode(image_bytes).decode()
+        # Sniff the media type from the bytes — the endpoint rejects a declared
+        # type that disagrees with the content (e.g. a real JPEG upload).
+        data_url = image_data_url(image_bytes)
         messages = [
             {"role": "system", "content": VISION_SYSTEM_PROMPT},
             {
                 "role": "user",
                 "content": [
                     {"type": "text", "text": VISION_USER_PROMPT},
-                    {"type": "image_url",
-                     "image_url": {"url": f"data:image/png;base64,{b64}"}},
+                    {"type": "image_url", "image_url": {"url": data_url}},
                 ],
             },
         ]
