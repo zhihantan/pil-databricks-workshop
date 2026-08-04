@@ -2,8 +2,10 @@
 // the Vite dev server proxies /api to localhost:8000.
 
 import type {
+  ContainerAnalysis,
   ExtractedInvoice,
   HealthResponse,
+  InspectionAccuracy,
   InspectionItem,
   InvoiceDecisionRequest,
   InvoiceQueueItem,
@@ -63,6 +65,22 @@ export const api = {
     }),
 
   listInspections: () => req<InspectionItem[]>("/api/inspections"),
+  inspectionAccuracy: () => req<InspectionAccuracy>("/api/inspections/accuracy"),
+  uploadContainer: async (fileToUpload: File): Promise<ContainerAnalysis> => {
+    const form = new FormData();
+    form.append("file", fileToUpload);
+    const res = await fetch("/api/inspections/upload", { method: "POST", body: form });
+    if (!res.ok) {
+      let detail = res.statusText;
+      try {
+        detail = (await res.json()).detail ?? detail;
+      } catch {
+        /* non-JSON */
+      }
+      throw new Error(`${res.status}: ${detail}`);
+    }
+    return (await res.json()) as ContainerAnalysis;
+  },
   refreshInspection: (fileName: string) =>
     req<{ result: Record<string, unknown> }>(
       `/api/inspections/${encodeURIComponent(fileName)}/refresh`,

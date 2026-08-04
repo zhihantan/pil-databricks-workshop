@@ -114,6 +114,36 @@ export interface InspectionItem {
   confidence: number | null;
   recommended_action: string | null;
   image_url: string | null;
+  gt_damage: string | null;
+  is_correct: boolean | null;
+}
+
+export interface InspectionAccuracy {
+  scored: number;
+  correct: number;
+  accuracy_pct: number | null;
+  confusions: Record<string, number>;
+}
+
+export interface VisionMetrics {
+  duration_ms: number;
+  save_ms: number;
+  analyze_ms: number;
+  est_input_tokens: number;
+  est_output_tokens: number;
+  est_total_tokens: number;
+  est_cost_usd: number;
+  model_endpoint: string | null;
+}
+
+export interface ContainerAnalysis {
+  file_name: string;
+  image_url: string | null;
+  damage: string | null;
+  damage_type: string | null;
+  confidence: number | null;
+  recommended_action: string | null;
+  metrics: VisionMetrics | null;
 }
 
 export interface WorkOrderRequest {
