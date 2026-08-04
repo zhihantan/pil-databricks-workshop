@@ -141,6 +141,11 @@ else:
         f"ON CATALOG `{CATALOG}` TO `{app_sp}`",
         f"GRANT WRITE VOLUME ON VOLUME `{CATALOG}`.`bronze`.`raw_invoices` TO `{app_sp}`",
         f"GRANT WRITE VOLUME ON VOLUME `{CATALOG}`.`bronze`.`container_images` TO `{app_sp}`",
+        # MODIFY on the app's own schema so the upload flows can INSERT into their
+        # Delta sinks (invoice_extractions_app, container_inspections_app) on the
+        # FIRST run too — notebook 08 also grants this, but 08 runs before the app
+        # SP exists on a fresh setup, so granting here closes that ordering gap.
+        f"GRANT MODIFY ON SCHEMA `{CATALOG}`.`apps` TO `{app_sp}`",
     ]
     for stmt in uc_grants:
         try:

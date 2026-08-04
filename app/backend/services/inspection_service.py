@@ -30,11 +30,18 @@ _COST_PER_M_TOKENS = 5.0  # same blended $/1M as the gold usage views
 
 class InspectionService:
     def __init__(
-        self, conn_factory: Any = None, sql_fn: Any = None, workspace_client: Any = None
+        self,
+        conn_factory: Any = None,
+        sql_fn: Any = None,
+        workspace_client: Any = None,
+        write_fn: Any = None,
     ) -> None:
         self._conn_factory = conn_factory
         self._sql_fn = sql_fn
         self._wc = workspace_client
+        # write_fn persists each live upload to the Delta sink (best-effort);
+        # when None the persist step is skipped (analysis still returns).
+        self._write_fn = write_fn
 
     def list_inspections(self) -> list[InspectionItem]:
         settings = get_settings()
@@ -48,14 +55,24 @@ class InspectionService:
                     f"FROM {settings.silver}.container_inspections_scored LIMIT 200"))
             except Exception as exc:  # noqa: BLE001
                 LOG.warning("Inspection read failed: %s", exc)
-        if not rows:
+        # Live uploads from the app's Delta sink. Read separately (not a SQL
+        # UNION) so a missing/empty sink on a fresh clone can never blank the
+        # batch gallery. Uploads are listed first and win on file-name dedup so
+        # a re-analyzed image shows its latest result exactly once.
+        uploads = self._read_uploads()
+        if not rows and not uploads:
             rows = _SAMPLE_INSPECTIONS
         items = []
+        seen: set[str] = set()
         allowed = set(InspectionItem.model_fields)
-        for r in rows:
+        for r in (*uploads, *rows):
             # Guard the strict damage enum: model/parse drift could yield an
             # unexpected label, which would 500 the whole endpoint otherwise.
             row = {k: v for k, v in dict(r).items() if k in allowed}
+            fn = row.get("file_name")
+            if fn in seen:
+                continue
+            seen.add(fn)
             if row.get("damage") not in _VALID_DAMAGE:
                 row["damage"] = None
             if "is_correct" in row and row["is_correct"] is not None:
@@ -64,6 +81,36 @@ class InspectionService:
             item.image_url = f"/api/inspections/{item.file_name}/image"
             items.append(item)
         return items
+
+    def _read_uploads(self) -> list[dict[str, Any]]:
+        """Return app-uploaded inspections from the Delta sink (latest per file).
+
+        Graceful: ``[]`` when there's no SQL fn or the sink isn't created yet
+        (``self._sql_fn`` is the graceful reader, so a missing table yields []).
+        Uploads carry no ground-truth, so ``gt_damage``/``is_correct`` are absent
+        and default to ``None`` on the model.
+        """
+        if not self._sql_fn:
+            return []
+        from pil_workshop.agent_bricks import container_uploads_table
+
+        table = container_uploads_table(get_settings().catalog)
+        sql = f"""
+            WITH ranked AS (
+                SELECT file_name, damage, damage_type, confidence, recommended_action,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY file_name ORDER BY analyzed_at DESC
+                       ) AS rn
+                FROM {table}
+            )
+            SELECT file_name, damage, damage_type, confidence, recommended_action
+            FROM ranked WHERE rn = 1 ORDER BY file_name
+        """
+        try:
+            return list(self._sql_fn(sql))
+        except Exception as exc:  # noqa: BLE001
+            LOG.info("Container uploads read unavailable: %s", exc)
+            return []
 
     def accuracy_summary(self) -> dict[str, Any]:
         """Return the vision agent's accuracy vs labelled ground truth.
@@ -167,8 +214,9 @@ class InspectionService:
         est_in = _VISION_IMAGE_TOKENS
         est_out = max(1, round(len(raw_out) / _CHARS_PER_TOKEN))
         est_total = est_in + est_out
-        return {
+        analysis = {
             "file_name": safe,
+            "volume_path": vol_path,
             "image_url": f"/api/inspections/{safe}/image",
             "damage": result.get("damage"),
             "damage_type": result.get("damage_type"),
@@ -185,6 +233,50 @@ class InspectionService:
                 "model_endpoint": endpoint,
             },
         }
+        # Persist to the Delta sink so the upload appears in the gallery and
+        # survives the daily batch rebuild. Best-effort: a write failure never
+        # fails the analysis response (the result is already computed).
+        try:
+            self._persist(analysis, result, endpoint, est_total)
+        except Exception as exc:  # noqa: BLE001
+            LOG.warning("Persist to container sink failed (analysis still returned): %s", exc)
+        return analysis
+
+    def _persist(
+        self, analysis: dict[str, Any], raw_result: dict[str, Any],
+        endpoint: str | None, est_total: int,
+    ) -> None:
+        """Write one upload row to the container Delta sink (parameterized INSERT).
+
+        Skipped when no ``write_fn`` is wired. ``CONTAINER_UPLOAD_COLUMNS`` is
+        the shared source of truth for column order, so DDL and INSERT can't
+        drift. ``analyzed_at`` is defaulted by the table, not passed here.
+        """
+        if not self._write_fn:
+            return
+        from pil_workshop.agent_bricks import (
+            CONTAINER_UPLOAD_COLUMNS,
+            container_uploads_table,
+        )
+
+        table = container_uploads_table(get_settings().catalog)
+        values = {
+            "file_name": analysis.get("file_name"),
+            "volume_path": analysis.get("volume_path"),
+            "damage": analysis.get("damage"),
+            "damage_type": analysis.get("damage_type"),
+            "confidence": analysis.get("confidence"),
+            "recommended_action": analysis.get("recommended_action"),
+            "model_endpoint": endpoint,
+            "est_total_tokens": est_total,
+            "raw_json": json.dumps(raw_result, default=str),
+        }
+        col_names = [c for c, _ in CONTAINER_UPLOAD_COLUMNS]
+        sql = (
+            f"INSERT INTO {table} ({', '.join(f'`{c}`' for c in col_names)}) "
+            f"VALUES ({', '.join(f':{c}' for c in col_names)})"
+        )
+        self._write_fn(sql, {c: values.get(c) for c in col_names})
 
     def create_work_order(self, req: WorkOrderRequest, actor: str) -> dict[str, Any]:
         conn = self._conn_factory() if self._conn_factory else None

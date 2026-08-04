@@ -226,8 +226,11 @@ def test_save_and_analyze_uploads_and_returns_metrics():
             return '{"damage":"major","damage_type":"dent","confidence":0.91,' \
                    '"recommended_action":"Remove from service"}'
 
+    writes: list = []
     wc = _FakeWC()
-    svc = InspectionService(workspace_client=wc)
+    svc = InspectionService(
+        workspace_client=wc, write_fn=lambda sql, params: writes.append((sql, params))
+    )
     r = svc.save_and_analyze("../x/cont.png", b"%PNGbytes", "vision-ep", FakeLLM())
     assert r["file_name"] == "cont.png"  # basename only
     assert r["damage"] == "major" and r["confidence"] == 0.91
@@ -235,6 +238,67 @@ def test_save_and_analyze_uploads_and_returns_metrics():
     m = r["metrics"]
     assert m["duration_ms"] >= m["analyze_ms"] and m["est_total_tokens"] > 0
     assert m["model_endpoint"] == "vision-ep"
+    # Persisted one row to the container Delta sink (parameterized INSERT).
+    assert len(writes) == 1
+    sql, params = writes[0]
+    assert "container_inspections_app" in sql and sql.strip().upper().startswith("INSERT")
+    assert params["file_name"] == "cont.png" and params["damage"] == "major"
+    assert params["model_endpoint"] == "vision-ep"
+
+
+def test_save_and_analyze_survives_persist_failure():
+    """A Delta write error must never fail the analysis response."""
+    class _FakeWC:
+        class files:  # noqa: N801
+            @staticmethod
+            def upload(path, buf, overwrite=False):  # noqa: ANN001
+                pass
+
+    class FakeLLM:
+        def chat(self, messages, **kwargs):
+            return '{"damage":"none","damage_type":"none","confidence":0.9,' \
+                   '"recommended_action":"release"}'
+
+    def _boom(sql, params):
+        raise RuntimeError("no MODIFY grant")
+
+    svc = InspectionService(workspace_client=_FakeWC(), write_fn=_boom)
+    r = svc.save_and_analyze("c.png", b"%PNGbytes", "ep", FakeLLM())
+    assert r["damage"] == "none"  # analysis still returned despite write failure
+
+
+def test_list_inspections_merges_uploads_over_batch_and_dedups():
+    """Live uploads appear in the gallery, win dedup over the batch row, and a
+    missing sink never blanks the batch set."""
+    scored = [
+        {"file_name": "container_0001.png", "container_no": "PILU1", "damage": "none",
+         "damage_type": "none", "confidence": 0.9, "recommended_action": "release",
+         "gt_damage": "none", "is_correct": 1},
+        {"file_name": "shared.png", "container_no": "PILU2", "damage": "minor",
+         "damage_type": "rust", "confidence": 0.7, "recommended_action": "flag",
+         "gt_damage": "minor", "is_correct": 1},
+    ]
+    uploads = [
+        {"file_name": "real_crushed.jpg", "damage": "major", "damage_type": "dent",
+         "confidence": 0.95, "recommended_action": "remove from service"},
+        {"file_name": "shared.png", "damage": "major", "damage_type": "dent",
+         "confidence": 0.99, "recommended_action": "remove from service"},
+    ]
+
+    def _sql(sql):
+        # The uploads read selects from the container sink; the batch read from
+        # the scored table. Route by table name in the SQL.
+        return uploads if "container_inspections_app" in sql else scored
+
+    svc = InspectionService(sql_fn=_sql)
+    items = {it.file_name: it for it in svc.list_inspections()}
+    # The uploaded-only image is present.
+    assert "real_crushed.jpg" in items and items["real_crushed.jpg"].damage == "major"
+    # Batch-only image is preserved.
+    assert "container_0001.png" in items
+    # Shared file appears once and the upload wins (0.99, not the batch 0.7).
+    all_shared = [it for it in svc.list_inspections() if it.file_name == "shared.png"]
+    assert len(all_shared) == 1 and all_shared[0].confidence == 0.99
 
 
 def test_accuracy_summary_computes_confusions():

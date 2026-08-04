@@ -512,6 +512,59 @@ JOIN `{catalog}`.`silver`.`container_image_labels` l
 
 
 # ---------------------------------------------------------------------------
+# Delta sink for app-uploaded container inspections.
+#
+# Mirrors the invoice sink (apps.invoice_extractions_app): the app writes one
+# row per ad-hoc container image uploaded through the Container Analysis tab,
+# so a live vision result persists as a queryable Delta row and shows in the
+# gallery. Kept SEPARATE from silver.container_inspections_scored — that table
+# is CREATE-OR-REPLACE'd by the daily batch and joined to ground-truth labels
+# for the accuracy KPI; ad-hoc uploads have no label and must survive the
+# rebuild, so they get their own append-only table the gallery UNIONs in.
+# CONTAINER_UPLOAD_COLUMNS is the single source of truth for the DDL + INSERT.
+# ---------------------------------------------------------------------------
+CONTAINER_UPLOADS_TABLE = "apps.container_inspections_app"
+
+# (column_name, sql_type) in insert order. analyzed_at is defaulted, not passed.
+CONTAINER_UPLOAD_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("file_name", "STRING"),
+    ("volume_path", "STRING"),
+    ("damage", "STRING"),
+    ("damage_type", "STRING"),
+    ("confidence", "DOUBLE"),
+    ("recommended_action", "STRING"),
+    ("model_endpoint", "STRING"),
+    ("est_total_tokens", "BIGINT"),
+    ("raw_json", "STRING"),
+)
+
+
+def container_uploads_table(catalog: str) -> str:
+    """Fully-qualified name of the app's container-inspection Delta sink."""
+    return f"`{catalog}`.`apps`.`container_inspections_app`"
+
+
+def build_container_uploads_ddl(catalog: str) -> str:
+    """Return CREATE TABLE IF NOT EXISTS for the app's container-upload sink.
+
+    ``analyzed_at`` defaults to the write time (Delta column defaults) so the
+    app never passes a timestamp. All other columns come from
+    ``CONTAINER_UPLOAD_COLUMNS`` so the DDL and the INSERT stay in lockstep.
+    """
+    cols = ",\n    ".join(f"`{name}` {sqltype}" for name, sqltype in CONTAINER_UPLOAD_COLUMNS)
+    return f"""
+CREATE TABLE IF NOT EXISTS {container_uploads_table(catalog)} (
+    `analyzed_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
+    {cols}
+)
+USING DELTA
+COMMENT 'Container-inspection results written by the PIL app upload flow — '
+        'one row per image analyzed live in the Container Analysis tab.'
+TBLPROPERTIES ('delta.feature.allowColumnDefaults' = 'supported')
+""".strip()
+
+
+# ---------------------------------------------------------------------------
 # Python-based container vision (reliable path).
 #
 # Passing images to a multimodal model via SQL ``ai_query(..., files => ...)``

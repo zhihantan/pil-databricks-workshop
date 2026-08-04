@@ -258,4 +258,37 @@ except Exception as exc:  # noqa: BLE001
 
 # COMMAND ----------
 
+# MAGIC %md #### Container upload sink — live analyses from the app
+# MAGIC The Container Analysis tab lets users upload an image and analyze it
+# MAGIC live. Each result is persisted here (one Delta row) so it appears in the
+# MAGIC gallery and survives the daily `CREATE OR REPLACE` of
+# MAGIC `container_inspections_scored`. Kept separate from that scored table —
+# MAGIC uploads have no ground-truth label and must not affect the accuracy KPI.
+# MAGIC The app writes via a parameterized INSERT, so its SP needs MODIFY+SELECT.
+
+# COMMAND ----------
+
+try:
+    spark.sql(agent_bricks.build_container_uploads_ddl(CATALOG))
+    ctbl = agent_bricks.container_uploads_table(CATALOG)
+    ok(f"Ensured Delta sink {ctbl}.")
+    try:
+        app_sp = dbx_api.app_service_principal_id(config.APP_NAME, client=wc)
+        if app_sp:
+            for priv in ("MODIFY", "SELECT"):
+                spark.sql(f"GRANT {priv} ON TABLE {ctbl} TO `{app_sp}`")
+            # USE SCHEMA on apps so the SP can resolve the table (idempotent —
+            # the invoice sink block above grants the same).
+            spark.sql(f"GRANT USE SCHEMA ON SCHEMA `{CATALOG}`.`apps` TO `{app_sp}`")
+            ok(f"Granted MODIFY+SELECT on {ctbl} to app SP {app_sp}.")
+        else:
+            warn("App SP not resolvable yet — grant MODIFY+SELECT after deploy "
+                 "(the daily run does this automatically).")
+    except Exception as gexc:  # noqa: BLE001
+        warn(f"Could not grant table access to the app SP (do it after deploy): {gexc}")
+except Exception as exc:  # noqa: BLE001
+    warn(f"Could not create the container-upload Delta sink: {exc}")
+
+# COMMAND ----------
+
 dbutils.notebook.exit("08 complete · invoice extraction + container vision")

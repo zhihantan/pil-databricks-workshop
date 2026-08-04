@@ -36,11 +36,14 @@ def get_extraction_service() -> ExtractionService:
 
 
 def get_inspection_service() -> InspectionService:
-    # workspace_client lets the upload flow write the image to the Volume.
+    # workspace_client lets the upload flow write the image to the Volume;
+    # sql_fn (graceful) reads the batch gallery + live uploads; write_fn
+    # persists each live upload to the apps.container_inspections_app sink.
     return InspectionService(
         conn_factory=lakebase_connection,
         sql_fn=sql_query,
         workspace_client=workspace_client(),
+        write_fn=sql_execute,
     )
 
 
