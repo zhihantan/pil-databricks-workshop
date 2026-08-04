@@ -78,6 +78,53 @@
       "layout": [
         {
           "widget": {
+            "name": "f_date_ops",
+            "queries": [
+              {
+                "name": "pil_filter_f_date_ops_ds_daily_ops_operations_date",
+                "query": {
+                  "datasetName": "ds_daily_ops",
+                  "fields": [
+                    {
+                      "name": "monthly(operations_date)",
+                      "expression": "DATE_TRUNC(\"MONTH\", `operations_date`)"
+                    },
+                    {
+                      "name": "monthly(operations_date)_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-date-range-picker",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "monthly(operations_date)",
+                    "displayName": "operations_date",
+                    "queryName": "pil_filter_f_date_ops_ds_daily_ops_operations_date"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Date range"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
             "name": "c_reliability",
             "queries": [
               {
@@ -111,7 +158,7 @@
           },
           "position": {
             "x": 0,
-            "y": 0,
+            "y": 1,
             "width": 2,
             "height": 3
           }
@@ -151,7 +198,7 @@
           },
           "position": {
             "x": 2,
-            "y": 0,
+            "y": 1,
             "width": 2,
             "height": 3
           }
@@ -191,7 +238,7 @@
           },
           "position": {
             "x": 4,
-            "y": 0,
+            "y": 1,
             "width": 2,
             "height": 3
           }
@@ -245,7 +292,7 @@
           },
           "position": {
             "x": 0,
-            "y": 3,
+            "y": 4,
             "width": 6,
             "height": 5
           }
@@ -310,7 +357,7 @@
           },
           "position": {
             "x": 0,
-            "y": 8,
+            "y": 9,
             "width": 3,
             "height": 5
           }
@@ -412,7 +459,7 @@
           },
           "position": {
             "x": 3,
-            "y": 8,
+            "y": 9,
             "width": 3,
             "height": 5
           }
@@ -423,6 +470,53 @@
       "name": "page_commercial",
       "displayName": "Commercial",
       "layout": [
+        {
+          "widget": {
+            "name": "f_date_com",
+            "queries": [
+              {
+                "name": "pil_filter_f_date_com_ds_revenue_month_month",
+                "query": {
+                  "datasetName": "ds_revenue_month",
+                  "fields": [
+                    {
+                      "name": "monthly(month)",
+                      "expression": "DATE_TRUNC(\"MONTH\", `month`)"
+                    },
+                    {
+                      "name": "monthly(month)_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-date-range-picker",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "monthly(month)",
+                    "displayName": "month",
+                    "queryName": "pil_filter_f_date_com_ds_revenue_month_month"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Date range"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
         {
           "widget": {
             "name": "l_rev_teu",
@@ -472,7 +566,7 @@
           },
           "position": {
             "x": 0,
-            "y": 0,
+            "y": 1,
             "width": 3,
             "height": 5
           }
@@ -526,7 +620,7 @@
           },
           "position": {
             "x": 3,
-            "y": 0,
+            "y": 1,
             "width": 3,
             "height": 5
           }
@@ -588,7 +682,7 @@
           },
           "position": {
             "x": 0,
-            "y": 5,
+            "y": 6,
             "width": 3,
             "height": 5
           }
@@ -689,7 +783,7 @@
           },
           "position": {
             "x": 3,
-            "y": 5,
+            "y": 6,
             "width": 3,
             "height": 5
           }
@@ -700,6 +794,53 @@
       "name": "page_sustainability",
       "displayName": "Sustainability",
       "layout": [
+        {
+          "widget": {
+            "name": "f_date_sus",
+            "queries": [
+              {
+                "name": "pil_filter_f_date_sus_ds_sustainability_month",
+                "query": {
+                  "datasetName": "ds_sustainability",
+                  "fields": [
+                    {
+                      "name": "monthly(month)",
+                      "expression": "DATE_TRUNC(\"MONTH\", `month`)"
+                    },
+                    {
+                      "name": "monthly(month)_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-date-range-picker",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "monthly(month)",
+                    "displayName": "month",
+                    "queryName": "pil_filter_f_date_sus_ds_sustainability_month"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Date range"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
         {
           "widget": {
             "name": "l_fuel_eff",
@@ -760,7 +901,7 @@
           },
           "position": {
             "x": 0,
-            "y": 0,
+            "y": 1,
             "width": 6,
             "height": 5
           }
@@ -822,7 +963,7 @@
           },
           "position": {
             "x": 0,
-            "y": 5,
+            "y": 6,
             "width": 3,
             "height": 5
           }
@@ -884,7 +1025,7 @@
           },
           "position": {
             "x": 3,
-            "y": 5,
+            "y": 6,
             "width": 3,
             "height": 5
           }
@@ -895,6 +1036,53 @@
       "name": "page_ai_governance",
       "displayName": "AI Usage & Governance",
       "layout": [
+        {
+          "widget": {
+            "name": "f_date_ai",
+            "queries": [
+              {
+                "name": "pil_filter_f_date_ai_ds_ai_usage_daily_usage_date",
+                "query": {
+                  "datasetName": "ds_ai_usage_daily",
+                  "fields": [
+                    {
+                      "name": "monthly(usage_date)",
+                      "expression": "DATE_TRUNC(\"MONTH\", `usage_date`)"
+                    },
+                    {
+                      "name": "monthly(usage_date)_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-date-range-picker",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "monthly(usage_date)",
+                    "displayName": "usage_date",
+                    "queryName": "pil_filter_f_date_ai_ds_ai_usage_daily_usage_date"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Date range"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
         {
           "widget": {
             "name": "c_tokens",
@@ -930,7 +1118,7 @@
           },
           "position": {
             "x": 0,
-            "y": 0,
+            "y": 1,
             "width": 2,
             "height": 3
           }
@@ -970,7 +1158,7 @@
           },
           "position": {
             "x": 2,
-            "y": 0,
+            "y": 1,
             "width": 2,
             "height": 3
           }
@@ -1010,7 +1198,7 @@
           },
           "position": {
             "x": 4,
-            "y": 0,
+            "y": 1,
             "width": 2,
             "height": 3
           }
@@ -1064,7 +1252,7 @@
           },
           "position": {
             "x": 0,
-            "y": 3,
+            "y": 4,
             "width": 3,
             "height": 5
           }
@@ -1118,7 +1306,7 @@
           },
           "position": {
             "x": 3,
-            "y": 3,
+            "y": 4,
             "width": 3,
             "height": 5
           }
@@ -1221,7 +1409,7 @@
           },
           "position": {
             "x": 0,
-            "y": 8,
+            "y": 9,
             "width": 3,
             "height": 5
           }
@@ -1296,7 +1484,7 @@
           },
           "position": {
             "x": 3,
-            "y": 8,
+            "y": 9,
             "width": 3,
             "height": 5
           }

@@ -21,7 +21,7 @@ import json
 import os
 from typing import Any
 
-from .config import PALETTE, PALETTE_SEQUENCE
+from .config import PALETTE_SEQUENCE
 
 # ---------------------------------------------------------------------------
 # Dataset definitions — the named queries the widgets read from.
@@ -264,6 +264,54 @@ def _table(
     return w
 
 
+def _date_filter(
+    name: str, title: str, bindings: list[tuple[str, str]]
+) -> dict[str, Any]:
+    """A date-range filter bound to one date column per dataset.
+
+    ``bindings`` = [(datasetName, date_column), ...]. Structure mirrors a
+    known-good ``filter-date-range-picker`` (dbdemos AIBI): one query per bound
+    dataset, each exposing the date column (as a DATE_TRUNC monthly field) plus
+    the ``COUNT_IF(associative_filter_predicate_group)`` associativity field
+    that powers cross-filtering; the encoding lists each field with its
+    queryName. Filtering the date range then slices every bound widget.
+    """
+    queries = []
+    enc_fields = []
+    for ds, col in bindings:
+        qname = f"pil_filter_{name}_{ds}_{col}"
+        fld = f"monthly({col})"
+        queries.append(
+            {
+                "name": qname,
+                "query": {
+                    "datasetName": ds,
+                    "fields": [
+                        {"name": fld, "expression": f'DATE_TRUNC("MONTH", `{col}`)'},
+                        {
+                            "name": f"{fld}_associativity",
+                            "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                        },
+                    ],
+                    "disaggregated": False,
+                },
+            }
+        )
+        enc_fields.append(
+            {"fieldName": fld, "displayName": col, "queryName": qname}
+        )
+    return {
+        "name": name,
+        "queries": queries,
+        "spec": {
+            "version": 2,
+            "widgetType": "filter-date-range-picker",
+            "encodings": {"fields": enc_fields},
+            "frame": {"showTitle": True, "title": title},
+        },
+    }
+
+
 def _text(name: str, markdown: str) -> dict[str, Any]:
     return {
         "name": name,
@@ -286,14 +334,14 @@ def _place(widget: dict[str, Any], x: int, y: int, w: int, h: int) -> dict[str, 
 def _page_ops() -> dict[str, Any]:
     layout = [
         _place(
-            _text(
-                "ops_hdr",
-                f"## 🚢 Fleet & Network Operations\nDeep navy `{PALETTE['navy']}` · "
-                f"ocean teal `{PALETTE['teal']}` · signal amber `{PALETTE['amber']}`",
+            _date_filter(
+                "f_date_ops",
+                "Date range",
+                [("ds_daily_ops", "operations_date")],
             ),
             0,
             0,
-            6,
+            2,
             1,
         ),
         _place(
@@ -378,7 +426,13 @@ def _page_ops() -> dict[str, Any]:
 
 def _page_commercial() -> dict[str, Any]:
     layout = [
-        _place(_text("com_hdr", "## 💰 Commercial"), 0, 0, 6, 1),
+        _place(
+            _date_filter("f_date_com", "Date range", [("ds_revenue_month", "month")]),
+            0,
+            0,
+            2,
+            1,
+        ),
         _place(
             _line(
                 "l_rev_teu",
@@ -442,7 +496,13 @@ def _page_commercial() -> dict[str, Any]:
 
 def _page_sustainability() -> dict[str, Any]:
     layout = [
-        _place(_text("sus_hdr", "## 🌱 Sustainability (IMO CII flavor)"), 0, 0, 6, 1),
+        _place(
+            _date_filter("f_date_sus", "Date range", [("ds_sustainability", "month")]),
+            0,
+            0,
+            2,
+            1,
+        ),
         _place(
             _line(
                 "l_fuel_eff",
@@ -494,14 +554,10 @@ def _page_sustainability() -> dict[str, Any]:
 def _page_ai_governance() -> dict[str, Any]:
     layout = [
         _place(
-            _text(
-                "ai_hdr",
-                "## 🤖 AI Usage & Governance\nLive Unity AI Gateway usage — "
-                "populates as participants run Part 2.",
-            ),
+            _date_filter("f_date_ai", "Date range", [("ds_ai_usage_daily", "usage_date")]),
             0,
             0,
-            6,
+            2,
             1,
         ),
         _place(
