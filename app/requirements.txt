@@ -1,0 +1,19 @@
+# PIL App runtime dependencies.
+#
+# Databricks Apps install from THIS file (requirements.txt at the app root,
+# next to app.yaml) — NOT app/backend/requirements.txt. Keep the runtime deps
+# here in sync with backend/requirements.txt (which additionally lists the
+# test-only packages). Without `openai` here the container-vision path
+# (llm.chat → OpenAI-compatible FMAPI client) fails at runtime.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+databricks-sdk>=0.40.0
+databricks-sql-connector>=3.6.0
+# Postgres driver for Lakebase (review queue / decisions / work orders).
+psycopg[binary]>=3.1
+# OpenAI-compatible client for the governed FMAPI (vision + chat). Never
+# api.openai.com — base_url is always the workspace /serving-endpoints route.
+openai>=1.40
+# FastAPI UploadFile (invoice + container-image upload endpoints).
+python-multipart>=0.0.9

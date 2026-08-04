@@ -22,10 +22,20 @@ LOG = get_logger("backend.inspection_service")
 _VALID_DAMAGE = {"none", "minor", "major"}
 
 
+# Token/cost estimation for the vision call (ai_query exposes no inline usage).
+# An image costs a large-ish fixed input-token block; output is small JSON.
+_VISION_IMAGE_TOKENS = 1200  # rough fixed cost of one container image
+_CHARS_PER_TOKEN = 4.0
+_COST_PER_M_TOKENS = 5.0  # same blended $/1M as the gold usage views
+
+
 class InspectionService:
-    def __init__(self, conn_factory: Any = None, sql_fn: Any = None) -> None:
+    def __init__(
+        self, conn_factory: Any = None, sql_fn: Any = None, workspace_client: Any = None
+    ) -> None:
         self._conn_factory = conn_factory
         self._sql_fn = sql_fn
+        self._wc = workspace_client
 
     def list_inspections(self) -> list[InspectionItem]:
         settings = get_settings()
@@ -34,23 +44,58 @@ class InspectionService:
             try:
                 rows = list(self._sql_fn(
                     f"SELECT file_name, container_no, pred_damage AS damage, "
-                    f"pred_damage_type AS damage_type, confidence, recommended_action "
+                    f"pred_damage_type AS damage_type, confidence, recommended_action, "
+                    f"gt_damage, is_correct "
                     f"FROM {settings.silver}.container_inspections_scored LIMIT 200"))
             except Exception as exc:  # noqa: BLE001
                 LOG.warning("Inspection read failed: %s", exc)
         if not rows:
             rows = _SAMPLE_INSPECTIONS
         items = []
+        allowed = set(InspectionItem.model_fields)
         for r in rows:
             # Guard the strict damage enum: model/parse drift could yield an
             # unexpected label, which would 500 the whole endpoint otherwise.
-            row = dict(r)
+            row = {k: v for k, v in dict(r).items() if k in allowed}
             if row.get("damage") not in _VALID_DAMAGE:
                 row["damage"] = None
+            if "is_correct" in row and row["is_correct"] is not None:
+                row["is_correct"] = bool(row["is_correct"])
             item = InspectionItem(**row)
             item.image_url = f"/api/inspections/{item.file_name}/image"
             items.append(item)
         return items
+
+    def accuracy_summary(self) -> dict[str, Any]:
+        """Return the vision agent's accuracy vs labelled ground truth.
+
+        Reads the scored table's is_correct + pred/gt damage. Returns
+        scored/correct/accuracy_pct plus off-diagonal confusion counts
+        ("predicted→actual" -> n). Empty summary if no ground truth is present.
+        """
+        settings = get_settings()
+        if not self._sql_fn:
+            return {"scored": 0, "correct": 0, "accuracy_pct": None, "confusions": {}}
+        try:
+            rows = list(self._sql_fn(
+                f"SELECT pred_damage, gt_damage, COUNT(*) AS n "
+                f"FROM {settings.silver}.container_inspections_scored "
+                f"WHERE gt_damage IS NOT NULL GROUP BY pred_damage, gt_damage"))
+        except Exception as exc:  # noqa: BLE001
+            LOG.info("Accuracy read unavailable: %s", exc)
+            return {"scored": 0, "correct": 0, "accuracy_pct": None, "confusions": {}}
+        scored = correct = 0
+        confusions: dict[str, int] = {}
+        for r in rows:
+            pred, gt, n = r.get("pred_damage"), r.get("gt_damage"), int(r.get("n") or 0)
+            scored += n
+            if pred == gt:
+                correct += n
+            else:
+                confusions[f"{pred}→{gt}"] = confusions.get(f"{pred}→{gt}", 0) + n
+        acc = round(100.0 * correct / scored, 1) if scored else None
+        return {"scored": scored, "correct": correct, "accuracy_pct": acc,
+                "confusions": confusions}
 
     def refresh_one(self, image_bytes: bytes, endpoint: str,
                     llm_module: Any) -> dict[str, Any]:
@@ -91,6 +136,55 @@ class InspectionService:
         except (ValueError, TypeError):
             return {"damage": "unknown", "raw": raw}
 
+    def save_and_analyze(
+        self, file_name: str, content: bytes, endpoint: str, llm_module: Any
+    ) -> dict[str, Any]:
+        """Upload a container image to the volume, analyze it, return result + metrics.
+
+        Mirrors the invoice upload flow: save to bronze/container_images via the
+        Files API (Volumes aren't fs-mounted in Apps), run the governed vision
+        endpoint, and attach run metrics (duration + estimated tokens/cost).
+        """
+        import io
+        import os
+        import time
+
+        settings = get_settings()
+        safe = os.path.basename(file_name)
+        vol_path = f"/Volumes/{settings.catalog}/bronze/container_images/{safe}"
+
+        t0 = time.perf_counter()
+        if self._wc is not None:
+            self._wc.files.upload(vol_path, io.BytesIO(content), overwrite=True)
+        save_ms = int((time.perf_counter() - t0) * 1000)
+
+        t1 = time.perf_counter()
+        result = self.refresh_one(content, endpoint, llm_module)
+        analyze_ms = int((time.perf_counter() - t1) * 1000)
+
+        raw_out = json.dumps(result)
+        est_in = _VISION_IMAGE_TOKENS
+        est_out = max(1, round(len(raw_out) / _CHARS_PER_TOKEN))
+        est_total = est_in + est_out
+        return {
+            "file_name": safe,
+            "image_url": f"/api/inspections/{safe}/image",
+            "damage": result.get("damage"),
+            "damage_type": result.get("damage_type"),
+            "confidence": _to_float(result.get("confidence")),
+            "recommended_action": result.get("recommended_action"),
+            "metrics": {
+                "save_ms": save_ms,
+                "analyze_ms": analyze_ms,
+                "duration_ms": save_ms + analyze_ms,
+                "est_input_tokens": est_in,
+                "est_output_tokens": est_out,
+                "est_total_tokens": est_total,
+                "est_cost_usd": round(est_total / 1_000_000 * _COST_PER_M_TOKENS, 4),
+                "model_endpoint": endpoint,
+            },
+        }
+
     def create_work_order(self, req: WorkOrderRequest, actor: str) -> dict[str, Any]:
         conn = self._conn_factory() if self._conn_factory else None
         if conn is None:
@@ -126,6 +220,13 @@ class InspectionService:
                 conn.close()
             except Exception:  # noqa: BLE001
                 pass
+
+
+def _to_float(v: Any) -> float | None:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
 
 
 _SAMPLE_INSPECTIONS: list[dict[str, Any]] = [

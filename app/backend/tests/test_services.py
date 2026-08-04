@@ -188,6 +188,55 @@ def test_refresh_one_uses_injected_llm():
     assert result["damage_type"] == "rust"
 
 
+def test_save_and_analyze_uploads_and_returns_metrics():
+    class _FakeFiles:
+        def __init__(self):
+            self.saved = {}
+
+        def upload(self, path, buf, overwrite=False):  # noqa: ANN001
+            self.saved[path] = buf.read()
+
+    class _FakeWC:
+        def __init__(self):
+            self.files = _FakeFiles()
+
+    class FakeLLM:
+        def chat(self, messages, **kwargs):
+            return '{"damage":"major","damage_type":"dent","confidence":0.91,' \
+                   '"recommended_action":"Remove from service"}'
+
+    wc = _FakeWC()
+    svc = InspectionService(workspace_client=wc)
+    r = svc.save_and_analyze("../x/cont.png", b"%PNGbytes", "vision-ep", FakeLLM())
+    assert r["file_name"] == "cont.png"  # basename only
+    assert r["damage"] == "major" and r["confidence"] == 0.91
+    assert any(p.endswith("/container_images/cont.png") for p in wc.files.saved)
+    m = r["metrics"]
+    assert m["duration_ms"] >= m["analyze_ms"] and m["est_total_tokens"] > 0
+    assert m["model_endpoint"] == "vision-ep"
+
+
+def test_accuracy_summary_computes_confusions():
+    def _sql(sql):
+        return [
+            {"pred_damage": "none", "gt_damage": "none", "n": 20},
+            {"pred_damage": "minor", "gt_damage": "minor", "n": 8},
+            {"pred_damage": "major", "gt_damage": "minor", "n": 5},  # wrong
+            {"pred_damage": "none", "gt_damage": "minor", "n": 3},   # wrong
+        ]
+
+    svc = InspectionService(sql_fn=_sql)
+    a = svc.accuracy_summary()
+    assert a["scored"] == 36 and a["correct"] == 28
+    assert a["accuracy_pct"] == round(100 * 28 / 36, 1)
+    assert a["confusions"] == {"major→minor": 5, "none→minor": 3}
+
+
+def test_accuracy_summary_empty_without_sql():
+    a = InspectionService(sql_fn=None).accuracy_summary()
+    assert a["scored"] == 0 and a["accuracy_pct"] is None
+
+
 def test_create_work_order_demo_mode_persists_and_counts():
     svc = InspectionService(conn_factory=None)
     out = svc.create_work_order(

@@ -126,6 +126,44 @@ class InspectionItem(BaseModel):
     confidence: float | None = None
     recommended_action: str | None = None
     image_url: str | None = None
+    # ground-truth comparison (from container_inspections_scored), when available
+    gt_damage: str | None = None
+    is_correct: bool | None = None
+
+
+class InspectionAccuracy(BaseModel):
+    """Accuracy summary of the vision agent vs labelled ground truth."""
+
+    scored: int = 0
+    correct: int = 0
+    accuracy_pct: float | None = None
+    # simple off-diagonal confusion counts: "predicted→actual" -> n
+    confusions: dict[str, int] = Field(default_factory=dict)
+
+
+class VisionMetrics(BaseModel):
+    """Run metrics for a single container-image analysis."""
+
+    duration_ms: int = 0
+    save_ms: int = 0
+    analyze_ms: int = 0
+    est_input_tokens: int = 0
+    est_output_tokens: int = 0
+    est_total_tokens: int = 0
+    est_cost_usd: float = 0.0
+    model_endpoint: str | None = None
+
+
+class ContainerAnalysis(BaseModel):
+    """Result of uploading + analyzing one container image."""
+
+    file_name: str
+    image_url: str | None = None
+    damage: str | None = None
+    damage_type: str | None = None
+    confidence: float | None = None
+    recommended_action: str | None = None
+    metrics: VisionMetrics | None = None
 
 
 class WorkOrderRequest(BaseModel):

@@ -36,7 +36,12 @@ def get_extraction_service() -> ExtractionService:
 
 
 def get_inspection_service() -> InspectionService:
-    return InspectionService(conn_factory=lakebase_connection, sql_fn=sql_query)
+    # workspace_client lets the upload flow write the image to the Volume.
+    return InspectionService(
+        conn_factory=lakebase_connection,
+        sql_fn=sql_query,
+        workspace_client=workspace_client(),
+    )
 
 
 def get_analytics_service() -> AnalyticsService:

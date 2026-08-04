@@ -134,11 +134,13 @@ if not app_sp:
 else:
     ok(f"App service principal: {app_sp}")
     # 1) Unity Catalog grants (SQL). Catalog-scope read cascades to schemas/tables/
-    #    volumes/functions; WRITE VOLUME is scoped to the invoice upload target.
+    #    volumes/functions; WRITE VOLUME is scoped to the two app upload targets
+    #    (invoice PDFs + container images).
     uc_grants = [
         f"GRANT USE CATALOG, USE SCHEMA, SELECT, EXECUTE, READ VOLUME "
         f"ON CATALOG `{CATALOG}` TO `{app_sp}`",
         f"GRANT WRITE VOLUME ON VOLUME `{CATALOG}`.`bronze`.`raw_invoices` TO `{app_sp}`",
+        f"GRANT WRITE VOLUME ON VOLUME `{CATALOG}`.`bronze`.`container_images` TO `{app_sp}`",
     ]
     for stmt in uc_grants:
         try:

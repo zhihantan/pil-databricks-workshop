@@ -4,18 +4,25 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 
 from backend.core.auth import current_user_email
 from backend.core.config import get_settings
 from backend.core.logging import get_logger
 from backend.deps import get_inspection_service
-from backend.models.schemas import InspectionItem, WorkOrderRequest
+from backend.models.schemas import (
+    ContainerAnalysis,
+    InspectionAccuracy,
+    InspectionItem,
+    WorkOrderRequest,
+)
 from backend.services.clients import workspace_client
 from backend.services.inspection_service import InspectionService
 
 router = APIRouter(prefix="/api/inspections", tags=["inspections"])
+
+_MAX_IMAGE_BYTES = 15 * 1024 * 1024  # 15 MB
 
 
 def _read_volume_image(file_name: str) -> tuple[bytes, str] | None:
@@ -49,6 +56,43 @@ def list_inspections(
 ) -> list[InspectionItem]:
     """List container inspections with damage classification."""
     return svc.list_inspections()
+
+
+@router.get("/accuracy", response_model=InspectionAccuracy)
+def accuracy(
+    svc: InspectionService = Depends(get_inspection_service),
+) -> InspectionAccuracy:
+    """Vision-agent accuracy vs labelled ground truth (+ confusion counts)."""
+    return InspectionAccuracy(**svc.accuracy_summary())
+
+
+@router.post("/upload", response_model=ContainerAnalysis)
+async def upload_and_analyze(
+    file: UploadFile = File(...),
+    svc: InspectionService = Depends(get_inspection_service),
+) -> ContainerAnalysis:
+    """Upload a container image → save to the volume → analyze via the governed
+    vision endpoint → return damage/type/confidence/action + run metrics."""
+    name = file.filename or "upload.png"
+    if not name.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+        raise HTTPException(status_code=400, detail="Only PNG/JPG/WEBP images are supported.")
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    if len(content) > _MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="Image exceeds the 15 MB limit.")
+    try:
+        from pil_workshop import llm
+
+        endpoints = llm.endpoints()
+        result = svc.save_and_analyze(name, content, endpoints.vision, llm)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail=f"Analysis failed: {exc}. Ensure the app can write to the "
+            "container_images Volume and query the governed vision endpoint.",
+        ) from exc
+    return ContainerAnalysis(**result)
 
 
 @router.get("/{file_name}/image")

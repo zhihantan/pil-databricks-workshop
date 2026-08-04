@@ -215,8 +215,18 @@ def resolve_endpoints(
 # ---------------------------------------------------------------------------
 # OpenAI-compatible client, pointed ONLY at the workspace serving endpoints.
 # ---------------------------------------------------------------------------
+def _ensure_scheme(host: str) -> str:
+    """Prepend https:// if missing. In Databricks Apps, DATABRICKS_HOST is set
+    WITHOUT a scheme (e.g. ``ws.cloud.databricks.com``); a schemeless base_url
+    makes the OpenAI/HTTP client fail with 'Connection error'."""
+    host = host.rstrip("/")
+    if host and not host.startswith(("http://", "https://")):
+        host = "https://" + host
+    return host
+
+
 def _workspace_host(client: Any | None) -> str:
-    """Return the workspace host URL (no trailing slash).
+    """Return the workspace host URL (with https:// scheme, no trailing slash).
 
     Order: DATABRICKS_HOST env → passed client's config → a freshly created
     WorkspaceClient's config (ambient auth inside notebooks/Jobs, where the env
@@ -224,17 +234,17 @@ def _workspace_host(client: Any | None) -> str:
     """
     host = os.environ.get("DATABRICKS_HOST", "").rstrip("/")
     if host:
-        return host
+        return _ensure_scheme(host)
     if client is not None:
         cfg = getattr(client, "config", None)
         if cfg is not None and getattr(cfg, "host", None):
-            return str(cfg.host).rstrip("/")
+            return _ensure_scheme(str(cfg.host))
     try:  # pragma: no cover - platform-only: resolve host from ambient SDK auth
         from databricks.sdk import WorkspaceClient
 
         cfg = WorkspaceClient().config
         if getattr(cfg, "host", None):
-            return str(cfg.host).rstrip("/")
+            return _ensure_scheme(str(cfg.host))
     except Exception:  # noqa: BLE001
         pass
     raise RuntimeError(
