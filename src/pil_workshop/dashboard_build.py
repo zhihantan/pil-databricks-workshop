@@ -108,6 +108,9 @@ DATASETS: list[dict[str, Any]] = [
 # Widget spec helpers (Lakeview widget spec versions).
 # ---------------------------------------------------------------------------
 def _counter(name: str, dataset: str, field: str, title: str) -> dict[str, Any]:
+    # Structure mirrors a known-good Lakeview counter: version 3 and
+    # disaggregated=true (with version 2 or disaggregated=false the renderer
+    # ignores the encodings and shows "Select fields to visualize" / no value).
     return {
         "name": name,
         "queries": [
@@ -116,13 +119,11 @@ def _counter(name: str, dataset: str, field: str, title: str) -> dict[str, Any]:
                 "query": {
                     "datasetName": dataset,
                     "fields": [{"name": field, "expression": f"`{field}`"}],
-                    "disaggregated": False,
+                    "disaggregated": True,
                 },
             }
         ],
         "spec": {
-            # Lakeview counters require version 3; with version 2 the renderer
-            # ignores the encodings and shows "Select fields to visualize".
             "version": 3,
             "widgetType": "counter",
             "encodings": {"value": {"fieldName": field, "displayName": title}},

@@ -109,7 +109,7 @@
                       "expression": "`schedule_reliability_pct`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
@@ -149,7 +149,7 @@
                       "expression": "`vessel_utilization_pct`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
@@ -189,7 +189,7 @@
                       "expression": "`avg_arrival_delay_hrs`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
@@ -922,7 +922,7 @@
                       "expression": "`total_tokens`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
@@ -962,7 +962,7 @@
                       "expression": "`request_count`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
@@ -1002,7 +1002,7 @@
                       "expression": "`est_cost_usd`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
