@@ -100,7 +100,7 @@
             "name": "c_reliability",
             "queries": [
               {
-                "name": "q_c_reliability",
+                "name": "main_query",
                 "query": {
                   "datasetName": "ds_daily_ops",
                   "fields": [
@@ -114,7 +114,7 @@
               }
             ],
             "spec": {
-              "version": 3,
+              "version": 2,
               "widgetType": "counter",
               "encodings": {
                 "value": {
@@ -140,7 +140,7 @@
             "name": "c_util",
             "queries": [
               {
-                "name": "q_c_util",
+                "name": "main_query",
                 "query": {
                   "datasetName": "ds_daily_ops",
                   "fields": [
@@ -154,7 +154,7 @@
               }
             ],
             "spec": {
-              "version": 3,
+              "version": 2,
               "widgetType": "counter",
               "encodings": {
                 "value": {
@@ -180,7 +180,7 @@
             "name": "c_delay",
             "queries": [
               {
-                "name": "q_c_delay",
+                "name": "main_query",
                 "query": {
                   "datasetName": "ds_daily_ops",
                   "fields": [
@@ -194,7 +194,7 @@
               }
             ],
             "spec": {
-              "version": 3,
+              "version": 2,
               "widgetType": "counter",
               "encodings": {
                 "value": {
@@ -220,7 +220,7 @@
             "name": "l_reliability",
             "queries": [
               {
-                "name": "q_l_reliability",
+                "name": "main_query",
                 "query": {
                   "datasetName": "ds_daily_ops",
                   "fields": [
@@ -229,11 +229,11 @@
                       "expression": "`operations_date`"
                     },
                     {
-                      "name": "schedule_reliability_pct",
-                      "expression": "`schedule_reliability_pct`"
+                      "name": "sum(schedule_reliability_pct)",
+                      "expression": "SUM(`schedule_reliability_pct`)"
                     }
                   ],
-                  "disaggregated": true
+                  "disaggregated": false
                 }
               }
             ],
@@ -243,10 +243,16 @@
               "encodings": {
                 "x": {
                   "fieldName": "operations_date",
+                  "scale": {
+                    "type": "temporal"
+                  },
                   "displayName": "operations_date"
                 },
                 "y": {
-                  "fieldName": "schedule_reliability_pct",
+                  "fieldName": "sum(schedule_reliability_pct)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
                   "displayName": "schedule_reliability_pct"
                 }
               },
@@ -423,7 +429,7 @@
             "name": "l_rev_teu",
             "queries": [
               {
-                "name": "q_l_rev_teu",
+                "name": "main_query",
                 "query": {
                   "datasetName": "ds_revenue_month",
                   "fields": [
@@ -432,11 +438,11 @@
                       "expression": "`month`"
                     },
                     {
-                      "name": "revenue_per_teu",
-                      "expression": "`revenue_per_teu`"
+                      "name": "sum(revenue_per_teu)",
+                      "expression": "SUM(`revenue_per_teu`)"
                     }
                   ],
-                  "disaggregated": true
+                  "disaggregated": false
                 }
               }
             ],
@@ -446,10 +452,16 @@
               "encodings": {
                 "x": {
                   "fieldName": "month",
+                  "scale": {
+                    "type": "temporal"
+                  },
                   "displayName": "month"
                 },
                 "y": {
-                  "fieldName": "revenue_per_teu",
+                  "fieldName": "sum(revenue_per_teu)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
                   "displayName": "revenue_per_teu"
                 }
               },
@@ -471,7 +483,7 @@
             "name": "l_dd",
             "queries": [
               {
-                "name": "q_l_dd",
+                "name": "main_query",
                 "query": {
                   "datasetName": "ds_revenue_month",
                   "fields": [
@@ -480,11 +492,11 @@
                       "expression": "`month`"
                     },
                     {
-                      "name": "dd_revenue",
-                      "expression": "`dd_revenue`"
+                      "name": "sum(dd_revenue)",
+                      "expression": "SUM(`dd_revenue`)"
                     }
                   ],
-                  "disaggregated": true
+                  "disaggregated": false
                 }
               }
             ],
@@ -494,10 +506,16 @@
               "encodings": {
                 "x": {
                   "fieldName": "month",
+                  "scale": {
+                    "type": "temporal"
+                  },
                   "displayName": "month"
                 },
                 "y": {
-                  "fieldName": "dd_revenue",
+                  "fieldName": "sum(dd_revenue)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
                   "displayName": "dd_revenue"
                 }
               },
@@ -519,7 +537,7 @@
             "name": "b_lane",
             "queries": [
               {
-                "name": "q_b_lane",
+                "name": "main_query",
                 "query": {
                   "datasetName": "ds_revenue_lane",
                   "fields": [
@@ -528,11 +546,11 @@
                       "expression": "`trade_lane`"
                     },
                     {
-                      "name": "revenue_usd",
-                      "expression": "`revenue_usd`"
+                      "name": "sum(revenue_usd)",
+                      "expression": "SUM(`revenue_usd`)"
                     }
                   ],
-                  "disaggregated": true
+                  "disaggregated": false
                 }
               }
             ],
@@ -541,11 +559,17 @@
               "widgetType": "bar",
               "encodings": {
                 "x": {
-                  "fieldName": "revenue_usd",
+                  "fieldName": "sum(revenue_usd)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
                   "displayName": "revenue_usd"
                 },
                 "y": {
                   "fieldName": "trade_lane",
+                  "scale": {
+                    "type": "categorical"
+                  },
                   "displayName": "trade_lane"
                 }
               },
@@ -666,7 +690,7 @@
             "name": "l_fuel_eff",
             "queries": [
               {
-                "name": "q_l_fuel_eff",
+                "name": "main_query",
                 "query": {
                   "datasetName": "ds_sustainability",
                   "fields": [
@@ -675,15 +699,15 @@
                       "expression": "`month`"
                     },
                     {
-                      "name": "fuel_eff",
-                      "expression": "`fuel_eff`"
-                    },
-                    {
                       "name": "vessel_class",
                       "expression": "`vessel_class`"
+                    },
+                    {
+                      "name": "sum(fuel_eff)",
+                      "expression": "SUM(`fuel_eff`)"
                     }
                   ],
-                  "disaggregated": true
+                  "disaggregated": false
                 }
               }
             ],
@@ -693,14 +717,23 @@
               "encodings": {
                 "x": {
                   "fieldName": "month",
+                  "scale": {
+                    "type": "temporal"
+                  },
                   "displayName": "month"
                 },
                 "y": {
-                  "fieldName": "fuel_eff",
+                  "fieldName": "sum(fuel_eff)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
                   "displayName": "fuel_eff"
                 },
                 "color": {
                   "fieldName": "vessel_class",
+                  "scale": {
+                    "type": "categorical"
+                  },
                   "displayName": "vessel_class"
                 }
               },
@@ -722,7 +755,7 @@
             "name": "b_co2_class",
             "queries": [
               {
-                "name": "q_b_co2_class",
+                "name": "main_query",
                 "query": {
                   "datasetName": "ds_sustainability",
                   "fields": [
@@ -731,11 +764,11 @@
                       "expression": "`vessel_class`"
                     },
                     {
-                      "name": "co2_per_teu_km",
-                      "expression": "`co2_per_teu_km`"
+                      "name": "sum(co2_per_teu_km)",
+                      "expression": "SUM(`co2_per_teu_km`)"
                     }
                   ],
-                  "disaggregated": true
+                  "disaggregated": false
                 }
               }
             ],
@@ -745,10 +778,16 @@
               "encodings": {
                 "x": {
                   "fieldName": "vessel_class",
+                  "scale": {
+                    "type": "categorical"
+                  },
                   "displayName": "vessel_class"
                 },
                 "y": {
-                  "fieldName": "co2_per_teu_km",
+                  "fieldName": "sum(co2_per_teu_km)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
                   "displayName": "co2_per_teu_km"
                 }
               },
@@ -770,7 +809,7 @@
             "name": "b_fuel_type",
             "queries": [
               {
-                "name": "q_b_fuel_type",
+                "name": "main_query",
                 "query": {
                   "datasetName": "ds_sustainability",
                   "fields": [
@@ -779,11 +818,11 @@
                       "expression": "`fuel_type`"
                     },
                     {
-                      "name": "fuel_eff",
-                      "expression": "`fuel_eff`"
+                      "name": "sum(fuel_eff)",
+                      "expression": "SUM(`fuel_eff`)"
                     }
                   ],
-                  "disaggregated": true
+                  "disaggregated": false
                 }
               }
             ],
@@ -793,10 +832,16 @@
               "encodings": {
                 "x": {
                   "fieldName": "fuel_type",
+                  "scale": {
+                    "type": "categorical"
+                  },
                   "displayName": "fuel_type"
                 },
                 "y": {
-                  "fieldName": "fuel_eff",
+                  "fieldName": "sum(fuel_eff)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
                   "displayName": "fuel_eff"
                 }
               },
@@ -843,7 +888,7 @@
             "name": "c_tokens",
             "queries": [
               {
-                "name": "q_c_tokens",
+                "name": "main_query",
                 "query": {
                   "datasetName": "ds_ai_usage_daily",
                   "fields": [
@@ -857,7 +902,7 @@
               }
             ],
             "spec": {
-              "version": 3,
+              "version": 2,
               "widgetType": "counter",
               "encodings": {
                 "value": {
@@ -883,7 +928,7 @@
             "name": "c_requests",
             "queries": [
               {
-                "name": "q_c_requests",
+                "name": "main_query",
                 "query": {
                   "datasetName": "ds_ai_usage_daily",
                   "fields": [
@@ -897,7 +942,7 @@
               }
             ],
             "spec": {
-              "version": 3,
+              "version": 2,
               "widgetType": "counter",
               "encodings": {
                 "value": {
@@ -923,7 +968,7 @@
             "name": "c_cost",
             "queries": [
               {
-                "name": "q_c_cost",
+                "name": "main_query",
                 "query": {
                   "datasetName": "ds_ai_usage_daily",
                   "fields": [
@@ -937,7 +982,7 @@
               }
             ],
             "spec": {
-              "version": 3,
+              "version": 2,
               "widgetType": "counter",
               "encodings": {
                 "value": {
@@ -963,7 +1008,7 @@
             "name": "l_tokens",
             "queries": [
               {
-                "name": "q_l_tokens",
+                "name": "main_query",
                 "query": {
                   "datasetName": "ds_ai_usage_daily",
                   "fields": [
@@ -972,11 +1017,11 @@
                       "expression": "`usage_date`"
                     },
                     {
-                      "name": "total_tokens",
-                      "expression": "`total_tokens`"
+                      "name": "sum(total_tokens)",
+                      "expression": "SUM(`total_tokens`)"
                     }
                   ],
-                  "disaggregated": true
+                  "disaggregated": false
                 }
               }
             ],
@@ -986,10 +1031,16 @@
               "encodings": {
                 "x": {
                   "fieldName": "usage_date",
+                  "scale": {
+                    "type": "temporal"
+                  },
                   "displayName": "usage_date"
                 },
                 "y": {
-                  "fieldName": "total_tokens",
+                  "fieldName": "sum(total_tokens)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
                   "displayName": "total_tokens"
                 }
               },
@@ -1011,7 +1062,7 @@
             "name": "l_errors",
             "queries": [
               {
-                "name": "q_l_errors",
+                "name": "main_query",
                 "query": {
                   "datasetName": "ds_ai_usage_daily",
                   "fields": [
@@ -1020,11 +1071,11 @@
                       "expression": "`usage_date`"
                     },
                     {
-                      "name": "error_count",
-                      "expression": "`error_count`"
+                      "name": "sum(error_count)",
+                      "expression": "SUM(`error_count`)"
                     }
                   ],
-                  "disaggregated": true
+                  "disaggregated": false
                 }
               }
             ],
@@ -1034,10 +1085,16 @@
               "encodings": {
                 "x": {
                   "fieldName": "usage_date",
+                  "scale": {
+                    "type": "temporal"
+                  },
                   "displayName": "usage_date"
                 },
                 "y": {
-                  "fieldName": "error_count",
+                  "fieldName": "sum(error_count)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
                   "displayName": "error_count"
                 }
               },

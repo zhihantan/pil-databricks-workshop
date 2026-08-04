@@ -108,14 +108,13 @@ DATASETS: list[dict[str, Any]] = [
 # Widget spec helpers (Lakeview widget spec versions).
 # ---------------------------------------------------------------------------
 def _counter(name: str, dataset: str, field: str, title: str) -> dict[str, Any]:
-    # Structure mirrors a known-good Lakeview counter: version 3 and
-    # disaggregated=true (with version 2 or disaggregated=false the renderer
-    # ignores the encodings and shows "Select fields to visualize" / no value).
+    # Verbatim structure of a known-good Lakeview counter (dbdemos AIBI):
+    # version 2, disaggregated=true, bare-column field, frame present.
     return {
         "name": name,
         "queries": [
             {
-                "name": f"q_{name}",
+                "name": "main_query",
                 "query": {
                     "datasetName": dataset,
                     "fields": [{"name": field, "expression": f"`{field}`"}],
@@ -124,7 +123,7 @@ def _counter(name: str, dataset: str, field: str, title: str) -> dict[str, Any]:
             }
         ],
         "spec": {
-            "version": 3,
+            "version": 2,
             "widgetType": "counter",
             "encodings": {"value": {"fieldName": field, "displayName": title}},
             "frame": {"title": title, "showTitle": True},
@@ -140,31 +139,37 @@ def _line(
     title: str,
     color_field: str | None = None,
 ) -> dict[str, Any]:
+    # Verbatim structure of a known-good Lakeview line (dbdemos AIBI):
+    # disaggregated=false, dimensions are raw columns, the measure is an
+    # AGGREGATE field whose `name` is the agg label (e.g. "sum(y)") and whose
+    # `expression` is the SQL agg. Encodings reference those exact names and
+    # keep the `scale`. Our datasets are pre-aggregated MVs, so SUM() is a
+    # harmless pass-through that gives Lakeview the aggregate form it requires.
     ys = [y] if isinstance(y, str) else y
+    ymeas = f"sum({ys[0]})"
     fields = [{"name": x, "expression": f"`{x}`"}]
-    for yy in ys:
-        fields.append({"name": yy, "expression": f"`{yy}`"})
     if color_field:
         fields.append({"name": color_field, "expression": f"`{color_field}`"})
-    # Minimal encodings matching a known-good Lakeview chart: fieldName +
-    # displayName only. Embedding a `scale` object (temporal/quantitative) makes
-    # the renderer reject the axis ("no axes selected"), so it's omitted.
+    fields.append({"name": ymeas, "expression": f"SUM(`{ys[0]}`)"})
     encodings: dict[str, Any] = {
-        "x": {"fieldName": x, "displayName": x},
-        "y": {"fieldName": ys[0], "displayName": ys[0]},
+        "x": {"fieldName": x, "scale": {"type": "temporal"}, "displayName": x},
+        "y": {"fieldName": ymeas, "scale": {"type": "quantitative"}, "displayName": ys[0]},
     }
     if color_field:
-        # A color encoding is valid only WITH a fieldName (never a bare scale).
-        encodings["color"] = {"fieldName": color_field, "displayName": color_field}
+        encodings["color"] = {
+            "fieldName": color_field,
+            "scale": {"type": "categorical"},
+            "displayName": color_field,
+        }
     return {
         "name": name,
         "queries": [
             {
-                "name": f"q_{name}",
+                "name": "main_query",
                 "query": {
                     "datasetName": dataset,
                     "fields": fields,
-                    "disaggregated": True,
+                    "disaggregated": False,
                 },
             }
         ],
@@ -180,38 +185,35 @@ def _line(
 def _bar(
     name: str, dataset: str, x: str, y: str, title: str, horizontal: bool = False
 ) -> dict[str, Any]:
+    # Known-good bar form: category dimension (raw) + aggregated measure,
+    # disaggregated=false, both axes keep a scale (categorical / quantitative).
+    ymeas = f"sum({y})"
+    cat_enc = {"fieldName": x, "scale": {"type": "categorical"}, "displayName": x}
+    meas_enc = {"fieldName": ymeas, "scale": {"type": "quantitative"}, "displayName": y}
+    encodings = (
+        {"x": cat_enc, "y": meas_enc}
+        if not horizontal
+        else {"x": meas_enc, "y": cat_enc}
+    )
     return {
         "name": name,
         "queries": [
             {
-                "name": f"q_{name}",
+                "name": "main_query",
                 "query": {
                     "datasetName": dataset,
                     "fields": [
                         {"name": x, "expression": f"`{x}`"},
-                        {"name": y, "expression": f"`{y}`"},
+                        {"name": ymeas, "expression": f"SUM(`{y}`)"},
                     ],
-                    "disaggregated": True,
+                    "disaggregated": False,
                 },
             }
         ],
         "spec": {
             "version": 3,
             "widgetType": "bar",
-            # Minimal encodings (fieldName + displayName). A `color` block with
-            # no fieldName is invalid and breaks the widget, so it's removed;
-            # displayName follows the field actually on that axis.
-            "encodings": (
-                {
-                    "x": {"fieldName": x, "displayName": x},
-                    "y": {"fieldName": y, "displayName": y},
-                }
-                if not horizontal
-                else {
-                    "x": {"fieldName": y, "displayName": y},
-                    "y": {"fieldName": x, "displayName": x},
-                }
-            ),
+            "encodings": encodings,
             "frame": {"title": title, "showTitle": True},
         },
     }
