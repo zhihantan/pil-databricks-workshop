@@ -39,14 +39,14 @@
       "name": "ds_revenue_month",
       "displayName": "Revenue per TEU Trend",
       "queryLines": [
-        "SELECT DATE_TRUNC('MONTH', revenue_date) AS month, ROUND(SUM(freight_revenue_usd + dd_revenue_usd)/NULLIF(SUM(teu),0),0) AS revenue_per_teu, ROUND(SUM(dd_revenue_usd),0) AS dd_revenue FROM ${catalog}.gold._rev_base GROUP BY 1 ORDER BY 1"
+        "SELECT revenue_date, ROUND(SUM(freight_revenue_usd + dd_revenue_usd)/NULLIF(SUM(teu),0),0) AS revenue_per_teu, ROUND(SUM(dd_revenue_usd),0) AS dd_revenue FROM ${catalog}.gold._rev_base GROUP BY revenue_date ORDER BY revenue_date"
       ]
     },
     {
       "name": "ds_sustainability",
       "displayName": "Sustainability",
       "queryLines": [
-        "SELECT DATE_TRUNC('MONTH', leg_date) AS month, vessel_class, fuel_type, ROUND(SUM(fuel_consumed_mt)/NULLIF(SUM(teu_nm)/1000.0,0),4) AS fuel_eff, ROUND(SUM(co2_mt)*1000.0/NULLIF(SUM(teu_nm)*1.852,0),4) AS co2_per_teu_km FROM ${catalog}.gold._sustainability_base GROUP BY 1,2,3 ORDER BY 1"
+        "SELECT leg_date, vessel_class, fuel_type, ROUND(SUM(fuel_consumed_mt)/NULLIF(SUM(teu_nm)/1000.0,0),4) AS fuel_eff, ROUND(SUM(co2_mt)*1000.0/NULLIF(SUM(teu_nm)*1.852,0),4) AS co2_per_teu_km FROM ${catalog}.gold._sustainability_base GROUP BY leg_date, vessel_class, fuel_type ORDER BY leg_date"
       ]
     },
     {
@@ -73,24 +73,93 @@
   ],
   "pages": [
     {
-      "name": "page_ops",
-      "displayName": "Fleet & Network Ops",
+      "name": "global_filters",
+      "displayName": "Global Filters",
+      "pageType": "PAGE_TYPE_GLOBAL_FILTERS",
       "layout": [
         {
           "widget": {
-            "name": "f_date_ops",
+            "name": "g_date",
             "queries": [
               {
-                "name": "pil_filter_f_date_ops_ds_daily_ops_operations_date",
+                "name": "pil_filter_g_date_ds_daily_ops_operations_date",
                 "query": {
                   "datasetName": "ds_daily_ops",
                   "fields": [
                     {
-                      "name": "monthly(operations_date)",
-                      "expression": "DATE_TRUNC(\"MONTH\", `operations_date`)"
+                      "name": "daily(operations_date)",
+                      "expression": "DATE_TRUNC(\"DAY\", `operations_date`)"
                     },
                     {
-                      "name": "monthly(operations_date)_associativity",
+                      "name": "daily(operations_date)_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "pil_filter_g_date_ds_container_util_operations_date",
+                "query": {
+                  "datasetName": "ds_container_util",
+                  "fields": [
+                    {
+                      "name": "daily(operations_date)",
+                      "expression": "DATE_TRUNC(\"DAY\", `operations_date`)"
+                    },
+                    {
+                      "name": "daily(operations_date)_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "pil_filter_g_date_ds_revenue_month_revenue_date",
+                "query": {
+                  "datasetName": "ds_revenue_month",
+                  "fields": [
+                    {
+                      "name": "daily(revenue_date)",
+                      "expression": "DATE_TRUNC(\"DAY\", `revenue_date`)"
+                    },
+                    {
+                      "name": "daily(revenue_date)_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "pil_filter_g_date_ds_sustainability_leg_date",
+                "query": {
+                  "datasetName": "ds_sustainability",
+                  "fields": [
+                    {
+                      "name": "daily(leg_date)",
+                      "expression": "DATE_TRUNC(\"DAY\", `leg_date`)"
+                    },
+                    {
+                      "name": "daily(leg_date)_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "pil_filter_g_date_ds_ai_usage_daily_usage_date",
+                "query": {
+                  "datasetName": "ds_ai_usage_daily",
+                  "fields": [
+                    {
+                      "name": "daily(usage_date)",
+                      "expression": "DATE_TRUNC(\"DAY\", `usage_date`)"
+                    },
+                    {
+                      "name": "daily(usage_date)_associativity",
                       "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
                   ],
@@ -104,9 +173,29 @@
               "encodings": {
                 "fields": [
                   {
-                    "fieldName": "monthly(operations_date)",
+                    "fieldName": "daily(operations_date)",
                     "displayName": "operations_date",
-                    "queryName": "pil_filter_f_date_ops_ds_daily_ops_operations_date"
+                    "queryName": "pil_filter_g_date_ds_daily_ops_operations_date"
+                  },
+                  {
+                    "fieldName": "daily(operations_date)",
+                    "displayName": "operations_date",
+                    "queryName": "pil_filter_g_date_ds_container_util_operations_date"
+                  },
+                  {
+                    "fieldName": "daily(revenue_date)",
+                    "displayName": "revenue_date",
+                    "queryName": "pil_filter_g_date_ds_revenue_month_revenue_date"
+                  },
+                  {
+                    "fieldName": "daily(leg_date)",
+                    "displayName": "leg_date",
+                    "queryName": "pil_filter_g_date_ds_sustainability_leg_date"
+                  },
+                  {
+                    "fieldName": "daily(usage_date)",
+                    "displayName": "usage_date",
+                    "queryName": "pil_filter_g_date_ds_ai_usage_daily_usage_date"
                   }
                 ]
               },
@@ -119,10 +208,16 @@
           "position": {
             "x": 0,
             "y": 0,
-            "width": 2,
-            "height": 1
+            "width": 1,
+            "height": 2
           }
-        },
+        }
+      ]
+    },
+    {
+      "name": "page_ops",
+      "displayName": "Fleet & Network Ops",
+      "layout": [
         {
           "widget": {
             "name": "c_reliability",
@@ -158,7 +253,7 @@
           },
           "position": {
             "x": 0,
-            "y": 1,
+            "y": 0,
             "width": 2,
             "height": 3
           }
@@ -198,7 +293,7 @@
           },
           "position": {
             "x": 2,
-            "y": 1,
+            "y": 0,
             "width": 2,
             "height": 3
           }
@@ -238,7 +333,7 @@
           },
           "position": {
             "x": 4,
-            "y": 1,
+            "y": 0,
             "width": 2,
             "height": 3
           }
@@ -292,7 +387,7 @@
           },
           "position": {
             "x": 0,
-            "y": 4,
+            "y": 3,
             "width": 6,
             "height": 5
           }
@@ -357,7 +452,7 @@
           },
           "position": {
             "x": 0,
-            "y": 9,
+            "y": 8,
             "width": 3,
             "height": 5
           }
@@ -459,64 +554,18 @@
           },
           "position": {
             "x": 3,
-            "y": 9,
+            "y": 8,
             "width": 3,
             "height": 5
           }
         }
-      ]
+      ],
+      "pageType": "PAGE_TYPE_CANVAS"
     },
     {
       "name": "page_commercial",
       "displayName": "Commercial",
       "layout": [
-        {
-          "widget": {
-            "name": "f_date_com",
-            "queries": [
-              {
-                "name": "pil_filter_f_date_com_ds_revenue_month_month",
-                "query": {
-                  "datasetName": "ds_revenue_month",
-                  "fields": [
-                    {
-                      "name": "monthly(month)",
-                      "expression": "DATE_TRUNC(\"MONTH\", `month`)"
-                    },
-                    {
-                      "name": "monthly(month)_associativity",
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "filter-date-range-picker",
-              "encodings": {
-                "fields": [
-                  {
-                    "fieldName": "monthly(month)",
-                    "displayName": "month",
-                    "queryName": "pil_filter_f_date_com_ds_revenue_month_month"
-                  }
-                ]
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "Date range"
-              }
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 0,
-            "width": 2,
-            "height": 1
-          }
-        },
         {
           "widget": {
             "name": "l_rev_teu",
@@ -527,8 +576,8 @@
                   "datasetName": "ds_revenue_month",
                   "fields": [
                     {
-                      "name": "month",
-                      "expression": "`month`"
+                      "name": "revenue_date",
+                      "expression": "`revenue_date`"
                     },
                     {
                       "name": "sum(revenue_per_teu)",
@@ -544,11 +593,11 @@
               "widgetType": "line",
               "encodings": {
                 "x": {
-                  "fieldName": "month",
+                  "fieldName": "revenue_date",
                   "scale": {
                     "type": "temporal"
                   },
-                  "displayName": "month"
+                  "displayName": "revenue_date"
                 },
                 "y": {
                   "fieldName": "sum(revenue_per_teu)",
@@ -566,7 +615,7 @@
           },
           "position": {
             "x": 0,
-            "y": 1,
+            "y": 0,
             "width": 3,
             "height": 5
           }
@@ -581,8 +630,8 @@
                   "datasetName": "ds_revenue_month",
                   "fields": [
                     {
-                      "name": "month",
-                      "expression": "`month`"
+                      "name": "revenue_date",
+                      "expression": "`revenue_date`"
                     },
                     {
                       "name": "sum(dd_revenue)",
@@ -598,11 +647,11 @@
               "widgetType": "line",
               "encodings": {
                 "x": {
-                  "fieldName": "month",
+                  "fieldName": "revenue_date",
                   "scale": {
                     "type": "temporal"
                   },
-                  "displayName": "month"
+                  "displayName": "revenue_date"
                 },
                 "y": {
                   "fieldName": "sum(dd_revenue)",
@@ -620,7 +669,7 @@
           },
           "position": {
             "x": 3,
-            "y": 1,
+            "y": 0,
             "width": 3,
             "height": 5
           }
@@ -682,7 +731,7 @@
           },
           "position": {
             "x": 0,
-            "y": 6,
+            "y": 5,
             "width": 3,
             "height": 5
           }
@@ -783,64 +832,18 @@
           },
           "position": {
             "x": 3,
-            "y": 6,
+            "y": 5,
             "width": 3,
             "height": 5
           }
         }
-      ]
+      ],
+      "pageType": "PAGE_TYPE_CANVAS"
     },
     {
       "name": "page_sustainability",
       "displayName": "Sustainability",
       "layout": [
-        {
-          "widget": {
-            "name": "f_date_sus",
-            "queries": [
-              {
-                "name": "pil_filter_f_date_sus_ds_sustainability_month",
-                "query": {
-                  "datasetName": "ds_sustainability",
-                  "fields": [
-                    {
-                      "name": "monthly(month)",
-                      "expression": "DATE_TRUNC(\"MONTH\", `month`)"
-                    },
-                    {
-                      "name": "monthly(month)_associativity",
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "filter-date-range-picker",
-              "encodings": {
-                "fields": [
-                  {
-                    "fieldName": "monthly(month)",
-                    "displayName": "month",
-                    "queryName": "pil_filter_f_date_sus_ds_sustainability_month"
-                  }
-                ]
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "Date range"
-              }
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 0,
-            "width": 2,
-            "height": 1
-          }
-        },
         {
           "widget": {
             "name": "l_fuel_eff",
@@ -851,8 +854,8 @@
                   "datasetName": "ds_sustainability",
                   "fields": [
                     {
-                      "name": "month",
-                      "expression": "`month`"
+                      "name": "leg_date",
+                      "expression": "`leg_date`"
                     },
                     {
                       "name": "vessel_class",
@@ -872,11 +875,11 @@
               "widgetType": "line",
               "encodings": {
                 "x": {
-                  "fieldName": "month",
+                  "fieldName": "leg_date",
                   "scale": {
                     "type": "temporal"
                   },
-                  "displayName": "month"
+                  "displayName": "leg_date"
                 },
                 "y": {
                   "fieldName": "sum(fuel_eff)",
@@ -901,7 +904,7 @@
           },
           "position": {
             "x": 0,
-            "y": 1,
+            "y": 0,
             "width": 6,
             "height": 5
           }
@@ -963,7 +966,7 @@
           },
           "position": {
             "x": 0,
-            "y": 6,
+            "y": 5,
             "width": 3,
             "height": 5
           }
@@ -1025,64 +1028,18 @@
           },
           "position": {
             "x": 3,
-            "y": 6,
+            "y": 5,
             "width": 3,
             "height": 5
           }
         }
-      ]
+      ],
+      "pageType": "PAGE_TYPE_CANVAS"
     },
     {
       "name": "page_ai_governance",
       "displayName": "AI Usage & Governance",
       "layout": [
-        {
-          "widget": {
-            "name": "f_date_ai",
-            "queries": [
-              {
-                "name": "pil_filter_f_date_ai_ds_ai_usage_daily_usage_date",
-                "query": {
-                  "datasetName": "ds_ai_usage_daily",
-                  "fields": [
-                    {
-                      "name": "monthly(usage_date)",
-                      "expression": "DATE_TRUNC(\"MONTH\", `usage_date`)"
-                    },
-                    {
-                      "name": "monthly(usage_date)_associativity",
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "filter-date-range-picker",
-              "encodings": {
-                "fields": [
-                  {
-                    "fieldName": "monthly(usage_date)",
-                    "displayName": "usage_date",
-                    "queryName": "pil_filter_f_date_ai_ds_ai_usage_daily_usage_date"
-                  }
-                ]
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "Date range"
-              }
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 0,
-            "width": 2,
-            "height": 1
-          }
-        },
         {
           "widget": {
             "name": "c_tokens",
@@ -1118,7 +1075,7 @@
           },
           "position": {
             "x": 0,
-            "y": 1,
+            "y": 0,
             "width": 2,
             "height": 3
           }
@@ -1158,7 +1115,7 @@
           },
           "position": {
             "x": 2,
-            "y": 1,
+            "y": 0,
             "width": 2,
             "height": 3
           }
@@ -1198,7 +1155,7 @@
           },
           "position": {
             "x": 4,
-            "y": 1,
+            "y": 0,
             "width": 2,
             "height": 3
           }
@@ -1252,7 +1209,7 @@
           },
           "position": {
             "x": 0,
-            "y": 4,
+            "y": 3,
             "width": 3,
             "height": 5
           }
@@ -1306,7 +1263,7 @@
           },
           "position": {
             "x": 3,
-            "y": 4,
+            "y": 3,
             "width": 3,
             "height": 5
           }
@@ -1409,7 +1366,7 @@
           },
           "position": {
             "x": 0,
-            "y": 9,
+            "y": 8,
             "width": 3,
             "height": 5
           }
@@ -1484,12 +1441,13 @@
           },
           "position": {
             "x": 3,
-            "y": 9,
+            "y": 8,
             "width": 3,
             "height": 5
           }
         }
-      ]
+      ],
+      "pageType": "PAGE_TYPE_CANVAS"
     }
   ],
   "uiSettings": {

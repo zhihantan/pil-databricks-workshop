@@ -67,22 +67,26 @@ DATASETS: list[dict[str, Any]] = [
     {
         "name": "ds_revenue_month",
         "displayName": "Revenue per TEU Trend",
+        # Daily grain (revenue_date exposed) so the global day-range filter can
+        # bind + slice to the exact day. Widgets aggregate over the range.
         "query": (
-            "SELECT DATE_TRUNC('MONTH', revenue_date) AS month, "
+            "SELECT revenue_date, "
             "ROUND(SUM(freight_revenue_usd + dd_revenue_usd)/NULLIF(SUM(teu),0),0) "
             "AS revenue_per_teu, "
             "ROUND(SUM(dd_revenue_usd),0) AS dd_revenue "
-            "FROM ${catalog}.gold._rev_base GROUP BY 1 ORDER BY 1"
+            "FROM ${catalog}.gold._rev_base GROUP BY revenue_date ORDER BY revenue_date"
         ),
     },
     {
         "name": "ds_sustainability",
         "displayName": "Sustainability",
+        # Daily grain (leg_date exposed) for the global day-range filter.
         "query": (
-            "SELECT DATE_TRUNC('MONTH', leg_date) AS month, vessel_class, fuel_type, "
+            "SELECT leg_date, vessel_class, fuel_type, "
             "ROUND(SUM(fuel_consumed_mt)/NULLIF(SUM(teu_nm)/1000.0,0),4) AS fuel_eff, "
             "ROUND(SUM(co2_mt)*1000.0/NULLIF(SUM(teu_nm)*1.852,0),4) AS co2_per_teu_km "
-            "FROM ${catalog}.gold._sustainability_base GROUP BY 1,2,3 ORDER BY 1"
+            "FROM ${catalog}.gold._sustainability_base GROUP BY leg_date, vessel_class, fuel_type "
+            "ORDER BY leg_date"
         ),
     },
     {
@@ -271,23 +275,24 @@ def _date_filter(
 
     ``bindings`` = [(datasetName, date_column), ...]. Structure mirrors a
     known-good ``filter-date-range-picker`` (dbdemos AIBI): one query per bound
-    dataset, each exposing the date column (as a DATE_TRUNC monthly field) plus
-    the ``COUNT_IF(associative_filter_predicate_group)`` associativity field
-    that powers cross-filtering; the encoding lists each field with its
-    queryName. Filtering the date range then slices every bound widget.
+    dataset, each exposing the date column (truncated to DAY so the range
+    filters to the exact day) plus the
+    ``COUNT_IF(associative_filter_predicate_group)`` associativity field that
+    powers cross-filtering; the encoding lists each field with its queryName.
+    Filtering the date range then slices every bound widget to the chosen days.
     """
     queries = []
     enc_fields = []
     for ds, col in bindings:
         qname = f"pil_filter_{name}_{ds}_{col}"
-        fld = f"monthly({col})"
+        fld = f"daily({col})"
         queries.append(
             {
                 "name": qname,
                 "query": {
                     "datasetName": ds,
                     "fields": [
-                        {"name": fld, "expression": f'DATE_TRUNC("MONTH", `{col}`)'},
+                        {"name": fld, "expression": f'DATE_TRUNC("DAY", `{col}`)'},
                         {
                             "name": f"{fld}_associativity",
                             "expression": "COUNT_IF(`associative_filter_predicate_group`)",
@@ -312,6 +317,24 @@ def _date_filter(
     }
 
 
+def _global_filters_page(bindings: list[tuple[str, str]]) -> dict[str, Any]:
+    """A dashboard-wide 'Global filters' page (Lakeview left-panel).
+
+    A page with ``pageType: PAGE_TYPE_GLOBAL_FILTERS`` holds filter widgets that
+    apply across the ENTIRE dashboard (all canvas pages), shown in the left
+    "Global filters" panel. We put a single date-range filter here bound to
+    every dataset's date column, so one control filters all four tabs to the
+    chosen day range.
+    """
+    filt = _date_filter("g_date", "Date range", bindings)
+    return {
+        "name": "global_filters",
+        "displayName": "Global Filters",
+        "pageType": "PAGE_TYPE_GLOBAL_FILTERS",
+        "layout": [_place(filt, 0, 0, 1, 2)],
+    }
+
+
 def _text(name: str, markdown: str) -> dict[str, Any]:
     return {
         "name": name,
@@ -333,17 +356,6 @@ def _place(widget: dict[str, Any], x: int, y: int, w: int, h: int) -> dict[str, 
 # ---------------------------------------------------------------------------
 def _page_ops() -> dict[str, Any]:
     layout = [
-        _place(
-            _date_filter(
-                "f_date_ops",
-                "Date range",
-                [("ds_daily_ops", "operations_date")],
-            ),
-            0,
-            0,
-            2,
-            1,
-        ),
         _place(
             _counter(
                 "c_reliability",
@@ -427,17 +439,10 @@ def _page_ops() -> dict[str, Any]:
 def _page_commercial() -> dict[str, Any]:
     layout = [
         _place(
-            _date_filter("f_date_com", "Date range", [("ds_revenue_month", "month")]),
-            0,
-            0,
-            2,
-            1,
-        ),
-        _place(
             _line(
                 "l_rev_teu",
                 "ds_revenue_month",
-                "month",
+                "revenue_date",
                 "revenue_per_teu",
                 "Revenue per TEU Trend",
             ),
@@ -450,7 +455,7 @@ def _page_commercial() -> dict[str, Any]:
             _line(
                 "l_dd",
                 "ds_revenue_month",
-                "month",
+                "revenue_date",
                 "dd_revenue",
                 "Demurrage & Detention Revenue",
             ),
@@ -497,17 +502,10 @@ def _page_commercial() -> dict[str, Any]:
 def _page_sustainability() -> dict[str, Any]:
     layout = [
         _place(
-            _date_filter("f_date_sus", "Date range", [("ds_sustainability", "month")]),
-            0,
-            0,
-            2,
-            1,
-        ),
-        _place(
             _line(
                 "l_fuel_eff",
                 "ds_sustainability",
-                "month",
+                "leg_date",
                 "fuel_eff",
                 "Fuel Efficiency (mt / 1k TEU-nm)",
                 color_field="vessel_class",
@@ -553,13 +551,6 @@ def _page_sustainability() -> dict[str, Any]:
 
 def _page_ai_governance() -> dict[str, Any]:
     layout = [
-        _place(
-            _date_filter("f_date_ai", "Date range", [("ds_ai_usage_daily", "usage_date")]),
-            0,
-            0,
-            2,
-            1,
-        ),
         _place(
             _counter("c_tokens", "ds_ai_usage_daily", "total_tokens", "Total Tokens"),
             0,
@@ -686,7 +677,9 @@ def _strip_text_and_compact(page: dict[str, Any]) -> dict[str, Any]:
         new_y += band_h
     for it in kept:
         it["position"]["y"] = y_to_new[it["position"]["y"]]
-    return {**page, "layout": kept}
+    # Set the explicit canvas page type (matches known-good dashboards; needed
+    # once a PAGE_TYPE_GLOBAL_FILTERS page is also present).
+    return {**page, "layout": kept, "pageType": "PAGE_TYPE_CANVAS"}
 
 
 def build_dashboard(catalog: str = "${catalog}") -> dict[str, Any]:
@@ -700,16 +693,27 @@ def build_dashboard(catalog: str = "${catalog}") -> dict[str, Any]:
                 "queryLines": [ds["query"].replace("${catalog}", catalog)],
             }
         )
-    pages = [
+    canvas_pages = [
         _page_ops(),
         _page_commercial(),
         _page_sustainability(),
         _page_ai_governance(),
     ]
-    pages = [_strip_text_and_compact(p) for p in pages]
+    canvas_pages = [_strip_text_and_compact(p) for p in canvas_pages]
+    # One dashboard-wide date-range filter (left "Global filters" panel), bound
+    # to every dataset's day-grain date column so it slices all four tabs.
+    global_page = _global_filters_page(
+        [
+            ("ds_daily_ops", "operations_date"),
+            ("ds_container_util", "operations_date"),
+            ("ds_revenue_month", "revenue_date"),
+            ("ds_sustainability", "leg_date"),
+            ("ds_ai_usage_daily", "usage_date"),
+        ]
+    )
     return {
         "datasets": datasets,
-        "pages": pages,
+        "pages": [global_page, *canvas_pages],
         "uiSettings": {"theme": {"colors": PALETTE_SEQUENCE}},
     }
 
