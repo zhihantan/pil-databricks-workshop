@@ -1,0 +1,388 @@
+{
+  "counter": {
+    "name": "kpi-total",
+    "queries": [
+      {
+        "name": "main_query",
+        "query": {
+          "datasetName": "kpi_fleet",
+          "fields": [
+            {
+              "name": "total_assets",
+              "expression": "`total_assets`"
+            }
+          ],
+          "disaggregated": true
+        }
+      }
+    ],
+    "spec": {
+      "version": 2,
+      "widgetType": "counter",
+      "encodings": {
+        "value": {
+          "fieldName": "total_assets",
+          "displayName": "Assets Monitored"
+        }
+      },
+      "frame": {
+        "showTitle": true,
+        "title": "Assets Monitored"
+      }
+    }
+  },
+  "line": {
+    "name": "trend-vib",
+    "queries": [
+      {
+        "name": "main_query",
+        "query": {
+          "datasetName": "degrading_trend",
+          "fields": [
+            {
+              "name": "ts_hour",
+              "expression": "`ts_hour`"
+            },
+            {
+              "name": "asset_id",
+              "expression": "`asset_id`"
+            },
+            {
+              "name": "avg(vibration_mm_s)",
+              "expression": "AVG(`vibration_mm_s`)"
+            }
+          ],
+          "disaggregated": false
+        }
+      }
+    ],
+    "spec": {
+      "version": 3,
+      "widgetType": "line",
+      "encodings": {
+        "x": {
+          "fieldName": "ts_hour",
+          "scale": {
+            "type": "temporal"
+          },
+          "displayName": "Time"
+        },
+        "y": {
+          "fieldName": "avg(vibration_mm_s)",
+          "scale": {
+            "type": "quantitative"
+          },
+          "displayName": "Vibration (mm/s)"
+        },
+        "color": {
+          "fieldName": "asset_id",
+          "scale": {
+            "type": "categorical"
+          },
+          "displayName": "Asset"
+        }
+      },
+      "frame": {
+        "showTitle": true,
+        "title": "Vibration trend \u2014 seeded degrading assets (7d)"
+      }
+    }
+  },
+  "bar": {
+    "name": "failmode-bar",
+    "queries": [
+      {
+        "name": "main_query",
+        "query": {
+          "datasetName": "failure_modes",
+          "fields": [
+            {
+              "name": "predicted_failure_mode",
+              "expression": "`predicted_failure_mode`"
+            },
+            {
+              "name": "sum(cnt)",
+              "expression": "SUM(`cnt`)"
+            }
+          ],
+          "disaggregated": false
+        }
+      }
+    ],
+    "spec": {
+      "version": 3,
+      "widgetType": "bar",
+      "encodings": {
+        "x": {
+          "fieldName": "predicted_failure_mode",
+          "scale": {
+            "type": "categorical",
+            "sort": {
+              "by": "y-reversed"
+            }
+          },
+          "displayName": "Failure Mode"
+        },
+        "y": {
+          "fieldName": "sum(cnt)",
+          "scale": {
+            "type": "quantitative"
+          },
+          "displayName": "At-risk Assets"
+        },
+        "label": {
+          "show": true
+        }
+      },
+      "frame": {
+        "showTitle": true,
+        "title": "At-risk Assets by Failure Mode"
+      },
+      "mark": {
+        "colors": [
+          "#FF3621"
+        ]
+      }
+    }
+  },
+  "scatter": {
+    "name": "plant-grid",
+    "queries": [
+      {
+        "name": "main_query",
+        "query": {
+          "datasetName": "asset_grid",
+          "fields": [
+            {
+              "name": "grid_col",
+              "expression": "`grid_col`"
+            },
+            {
+              "name": "grid_row",
+              "expression": "`grid_row`"
+            },
+            {
+              "name": "risk_score",
+              "expression": "`risk_score`"
+            },
+            {
+              "name": "risk_band",
+              "expression": "`risk_band`"
+            },
+            {
+              "name": "asset_id",
+              "expression": "`asset_id`"
+            },
+            {
+              "name": "asset_type",
+              "expression": "`asset_type`"
+            },
+            {
+              "name": "predicted_failure_mode",
+              "expression": "`predicted_failure_mode`"
+            },
+            {
+              "name": "model_used",
+              "expression": "`model_used`"
+            }
+          ],
+          "disaggregated": true
+        }
+      }
+    ],
+    "spec": {
+      "version": 3,
+      "widgetType": "scatter",
+      "encodings": {
+        "x": {
+          "fieldName": "grid_col",
+          "scale": {
+            "type": "quantitative"
+          },
+          "displayName": "Bay (col)"
+        },
+        "y": {
+          "fieldName": "grid_row",
+          "scale": {
+            "type": "quantitative"
+          },
+          "displayName": "Aisle (row)"
+        },
+        "color": {
+          "fieldName": "risk_band",
+          "scale": {
+            "type": "categorical",
+            "mappings": [
+              {
+                "value": "CRITICAL",
+                "color": "#d03b3b"
+              },
+              {
+                "value": "HIGH",
+                "color": "#ec835a"
+              },
+              {
+                "value": "MEDIUM",
+                "color": "#fab219"
+              },
+              {
+                "value": "LOW",
+                "color": "#0ca30c"
+              }
+            ]
+          },
+          "displayName": "Risk"
+        },
+        "size": {
+          "fieldName": "risk_score",
+          "scale": {
+            "type": "quantitative"
+          },
+          "displayName": "Risk Score"
+        }
+      },
+      "frame": {
+        "showTitle": true,
+        "title": "Plant-Floor Map \u2014 asset risk by location"
+      }
+    }
+  },
+  "table": {
+    "name": "atrisk-table",
+    "queries": [
+      {
+        "name": "main_query",
+        "query": {
+          "datasetName": "at_risk_detail",
+          "fields": [
+            {
+              "name": "asset_name",
+              "expression": "`asset_name`"
+            },
+            {
+              "name": "asset_type",
+              "expression": "`asset_type`"
+            },
+            {
+              "name": "plant_area",
+              "expression": "`plant_area`"
+            },
+            {
+              "name": "risk_score",
+              "expression": "`risk_score`"
+            },
+            {
+              "name": "risk_band",
+              "expression": "`risk_band`"
+            },
+            {
+              "name": "predicted_failure_mode",
+              "expression": "`predicted_failure_mode`"
+            },
+            {
+              "name": "predicted_time_to_failure_hours",
+              "expression": "`predicted_time_to_failure_hours`"
+            },
+            {
+              "name": "error_code",
+              "expression": "`error_code`"
+            },
+            {
+              "name": "root_cause",
+              "expression": "`root_cause`"
+            },
+            {
+              "name": "recommended_solution",
+              "expression": "`recommended_solution`"
+            },
+            {
+              "name": "required_skill",
+              "expression": "`required_skill`"
+            },
+            {
+              "name": "est_repair_minutes",
+              "expression": "`est_repair_minutes`"
+            },
+            {
+              "name": "model_used",
+              "expression": "`model_used`"
+            },
+            {
+              "name": "narrative",
+              "expression": "`narrative`"
+            }
+          ],
+          "disaggregated": true
+        }
+      }
+    ],
+    "spec": {
+      "version": 2,
+      "widgetType": "table",
+      "encodings": {
+        "columns": [
+          {
+            "fieldName": "asset_name",
+            "displayName": "Asset"
+          },
+          {
+            "fieldName": "asset_type",
+            "displayName": "Type"
+          },
+          {
+            "fieldName": "plant_area",
+            "displayName": "Area"
+          },
+          {
+            "fieldName": "risk_score",
+            "displayName": "Risk"
+          },
+          {
+            "fieldName": "risk_band",
+            "displayName": "Band"
+          },
+          {
+            "fieldName": "predicted_failure_mode",
+            "displayName": "Failure Mode"
+          },
+          {
+            "fieldName": "predicted_time_to_failure_hours",
+            "displayName": "TTF (h)"
+          },
+          {
+            "fieldName": "error_code",
+            "displayName": "Code"
+          },
+          {
+            "fieldName": "root_cause",
+            "displayName": "Root Cause"
+          },
+          {
+            "fieldName": "recommended_solution",
+            "displayName": "Solution"
+          },
+          {
+            "fieldName": "required_skill",
+            "displayName": "Skill"
+          },
+          {
+            "fieldName": "est_repair_minutes",
+            "displayName": "Est. min"
+          },
+          {
+            "fieldName": "model_used",
+            "displayName": "Model"
+          },
+          {
+            "fieldName": "narrative",
+            "displayName": "AI Narrative"
+          }
+        ]
+      },
+      "frame": {
+        "showTitle": true,
+        "title": "At-Risk Assets \u2014 root cause, fix & serving model"
+      }
+    }
+  }
+}

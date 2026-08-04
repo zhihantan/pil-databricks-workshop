@@ -16,6 +16,7 @@ the real catalog name. The committed file keeps the token so it stays portable.
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 from typing import Any
@@ -105,30 +106,49 @@ DATASETS: list[dict[str, Any]] = [
 
 
 # ---------------------------------------------------------------------------
-# Widget spec helpers (Lakeview widget spec versions).
+# Widget builders — clone-and-retarget from VERBATIM known-good widget scaffolds.
+#
+# Hand-writing widget specs failed repeatedly: even specs that looked identical
+# to rendering ones came up empty ("no fields selected"). The reliable approach
+# is to deep-copy a widget captured from a dashboard that provably renders in
+# the workspace (assets/dashboards/_widget_templates.json, from the Predictive
+# Maintenance dashboard) and only swap the dataset + field/encoding names. This
+# keeps every structural detail byte-identical to a working widget.
 # ---------------------------------------------------------------------------
+_TEMPLATES: dict[str, Any] = {}  # lazily loaded cache of known-good widget scaffolds
+
+
+def _template_path() -> str:
+    here = os.path.dirname(os.path.abspath(__file__))
+    repo = os.path.dirname(os.path.dirname(here))
+    return os.path.join(repo, "assets", "dashboards", "_widget_templates.json")
+
+
+def _tmpl(widget_type: str) -> dict[str, Any]:
+    """Return a deep copy of the captured known-good widget of ``widget_type``."""
+    global _TEMPLATES
+    if not _TEMPLATES:
+        with open(_template_path(), encoding="utf-8") as fh:
+            _TEMPLATES = json.load(fh)
+    return copy.deepcopy(_TEMPLATES[widget_type])
+
+
+def _raw_fields(cols: list[str]) -> list[dict[str, str]]:
+    return [{"name": c, "expression": f"`{c}`"} for c in cols]
+
+
 def _counter(name: str, dataset: str, field: str, title: str) -> dict[str, Any]:
-    # Verbatim structure of a known-good Lakeview counter (dbdemos AIBI):
-    # version 2, disaggregated=true, bare-column field, frame present.
-    return {
-        "name": name,
-        "queries": [
-            {
-                "name": "main_query",
-                "query": {
-                    "datasetName": dataset,
-                    "fields": [{"name": field, "expression": f"`{field}`"}],
-                    "disaggregated": True,
-                },
-            }
-        ],
-        "spec": {
-            "version": 2,
-            "widgetType": "counter",
-            "encodings": {"value": {"fieldName": field, "displayName": title}},
-            "frame": {"title": title, "showTitle": True},
-        },
-    }
+    w = _tmpl("counter")
+    w["name"] = name
+    q = w["queries"][0]["query"]
+    q["datasetName"] = dataset
+    q["fields"] = _raw_fields([field])
+    v = w["spec"]["encodings"]["value"]
+    v["fieldName"] = field
+    v["displayName"] = title
+    v.pop("style", None)  # template's conditional-format rule is not wanted here
+    w["spec"]["frame"] = {"showTitle": True, "title": title}
+    return w
 
 
 def _line(
@@ -139,159 +159,73 @@ def _line(
     title: str,
     color_field: str | None = None,
 ) -> dict[str, Any]:
-    # Verbatim structure of a known-good Lakeview line (dbdemos AIBI):
-    # disaggregated=false, dimensions are raw columns, the measure is an
-    # AGGREGATE field whose `name` is the agg label (e.g. "sum(y)") and whose
-    # `expression` is the SQL agg. Encodings reference those exact names and
-    # keep the `scale`. Our datasets are pre-aggregated MVs, so SUM() is a
-    # harmless pass-through that gives Lakeview the aggregate form it requires.
     ys = [y] if isinstance(y, str) else y
     ymeas = f"sum({ys[0]})"
+    w = _tmpl("line")
+    w["name"] = name
+    q = w["queries"][0]["query"]
+    q["datasetName"] = dataset
     fields = [{"name": x, "expression": f"`{x}`"}]
     if color_field:
         fields.append({"name": color_field, "expression": f"`{color_field}`"})
     fields.append({"name": ymeas, "expression": f"SUM(`{ys[0]}`)"})
-    encodings: dict[str, Any] = {
-        "x": {"fieldName": x, "scale": {"type": "temporal"}, "displayName": x},
-        "y": {"fieldName": ymeas, "scale": {"type": "quantitative"}, "displayName": ys[0]},
-    }
+    q["fields"] = fields
+    q["disaggregated"] = False
+    enc = w["spec"]["encodings"]
+    enc["x"] = {"fieldName": x, "scale": {"type": "temporal"}, "displayName": x}
+    enc["y"] = {"fieldName": ymeas, "scale": {"type": "quantitative"}, "displayName": ys[0]}
     if color_field:
-        encodings["color"] = {
+        enc["color"] = {
             "fieldName": color_field,
             "scale": {"type": "categorical"},
             "displayName": color_field,
         }
-    return {
-        "name": name,
-        "queries": [
-            {
-                "name": "main_query",
-                "query": {
-                    "datasetName": dataset,
-                    "fields": fields,
-                    "disaggregated": False,
-                },
-            }
-        ],
-        "spec": {
-            "version": 3,
-            "widgetType": "line",
-            "encodings": encodings,
-            "frame": {"title": title, "showTitle": True},
-        },
-    }
+    else:
+        enc.pop("color", None)
+    w["spec"]["frame"] = {"showTitle": True, "title": title}
+    return w
 
 
 def _bar(
     name: str, dataset: str, x: str, y: str, title: str, horizontal: bool = False
 ) -> dict[str, Any]:
-    # Known-good bar form: category dimension (raw) + aggregated measure,
-    # disaggregated=false, both axes keep a scale (categorical / quantitative).
     ymeas = f"sum({y})"
+    w = _tmpl("bar")
+    w["name"] = name
+    q = w["queries"][0]["query"]
+    q["datasetName"] = dataset
+    q["fields"] = [
+        {"name": x, "expression": f"`{x}`"},
+        {"name": ymeas, "expression": f"SUM(`{y}`)"},
+    ]
+    q["disaggregated"] = False
     cat_enc = {"fieldName": x, "scale": {"type": "categorical"}, "displayName": x}
     meas_enc = {"fieldName": ymeas, "scale": {"type": "quantitative"}, "displayName": y}
-    encodings = (
-        {"x": cat_enc, "y": meas_enc}
-        if not horizontal
-        else {"x": meas_enc, "y": cat_enc}
-    )
-    return {
-        "name": name,
-        "queries": [
-            {
-                "name": "main_query",
-                "query": {
-                    "datasetName": dataset,
-                    "fields": [
-                        {"name": x, "expression": f"`{x}`"},
-                        {"name": ymeas, "expression": f"SUM(`{y}`)"},
-                    ],
-                    "disaggregated": False,
-                },
-            }
-        ],
-        "spec": {
-            "version": 3,
-            "widgetType": "bar",
-            "encodings": encodings,
-            "frame": {"title": title, "showTitle": True},
-        },
-    }
+    enc = w["spec"]["encodings"]
+    if horizontal:
+        enc["x"], enc["y"] = meas_enc, cat_enc
+    else:
+        enc["x"], enc["y"] = cat_enc, meas_enc
+    w["spec"]["frame"] = {"showTitle": True, "title": title}
+    return w
 
 
 def _scatter(
     name: str, dataset: str, x: str, y: str, size: str, title: str
 ) -> dict[str, Any]:
-    # Verbatim structure of a known-good Lakeview scatter (Predictive
-    # Maintenance dashboard): version 3, disaggregated=true (raw points), and
-    # each x/y/size encoding carries a quantitative `scale`. Omitting the scale
-    # (my earlier "minimal" attempt) made the renderer not pick the axes.
-    return {
-        "name": name,
-        "queries": [
-            {
-                "name": "main_query",
-                "query": {
-                    "datasetName": dataset,
-                    "fields": [
-                        {"name": x, "expression": f"`{x}`"},
-                        {"name": y, "expression": f"`{y}`"},
-                        {"name": size, "expression": f"`{size}`"},
-                    ],
-                    "disaggregated": True,
-                },
-            }
-        ],
-        "spec": {
-            "version": 3,
-            "widgetType": "scatter",
-            "encodings": {
-                "x": {"fieldName": x, "scale": {"type": "quantitative"}, "displayName": x},
-                "y": {"fieldName": y, "scale": {"type": "quantitative"}, "displayName": y},
-                "size": {
-                    "fieldName": size,
-                    "scale": {"type": "quantitative"},
-                    "displayName": size,
-                },
-            },
-            "frame": {"title": title, "showTitle": True},
-        },
-    }
-
-
-def _table_column(field: str, order: int, numeric: bool) -> dict[str, Any]:
-    """Full Lakeview table-column encoding (matches a known-good table widget).
-
-    A bare {fieldName, displayName} column does NOT render — Lakeview needs the
-    complete column descriptor (type/displayAs/visible/order/title/…).
-    """
-    col: dict[str, Any] = {
-        "fieldName": field,
-        "booleanValues": ["false", "true"],
-        "imageUrlTemplate": "{{ @ }}",
-        "imageTitleTemplate": "{{ @ }}",
-        "imageWidth": "",
-        "imageHeight": "",
-        "linkUrlTemplate": "{{ @ }}",
-        "linkTextTemplate": "{{ @ }}",
-        "linkTitleTemplate": "{{ @ }}",
-        "linkOpenInNewTab": True,
-        "type": "integer" if numeric else "string",
-        "displayAs": "number" if numeric else "string",
-        "visible": True,
-        "order": 100000 + order,
-        "title": field,
-        "allowSearch": False,
-        "alignContent": "right" if numeric else "left",
-        "allowHTML": False,
-        "highlightLinks": False,
-        "useMonospaceFont": False,
-        "preserveWhitespace": False,
-        "displayName": field,
-    }
-    if numeric:
-        col["numberFormat"] = "0.00"
-    return col
+    w = _tmpl("scatter")
+    w["name"] = name
+    q = w["queries"][0]["query"]
+    q["datasetName"] = dataset
+    q["fields"] = _raw_fields([x, y, size])
+    q["disaggregated"] = True
+    enc = w["spec"]["encodings"]
+    enc["x"] = {"fieldName": x, "scale": {"type": "quantitative"}, "displayName": x}
+    enc["y"] = {"fieldName": y, "scale": {"type": "quantitative"}, "displayName": y}
+    enc["size"] = {"fieldName": size, "scale": {"type": "quantitative"}, "displayName": size}
+    enc.pop("color", None)  # template colors by a band field we don't have
+    w["spec"]["frame"] = {"showTitle": True, "title": title}
+    return w
 
 
 def _table(
@@ -302,29 +236,32 @@ def _table(
     numeric: set[str] | None = None,
 ) -> dict[str, Any]:
     numeric = numeric or set()
-    return {
-        "name": name,
-        "queries": [
-            {
-                "name": "main_query",
-                "query": {
-                    "datasetName": dataset,
-                    "fields": [{"name": c, "expression": f"`{c}`"} for c in columns],
-                    "disaggregated": True,
-                },
-            }
-        ],
-        "spec": {
-            "version": 1,
-            "widgetType": "table",
-            "encodings": {
-                "columns": [
-                    _table_column(c, i, c in numeric) for i, c in enumerate(columns)
-                ]
-            },
-            "frame": {"title": title, "showTitle": True},
-        },
-    }
+    w = _tmpl("table")
+    w["name"] = name
+    q = w["queries"][0]["query"]
+    q["datasetName"] = dataset
+    q["fields"] = _raw_fields(columns)
+    q["disaggregated"] = True
+    # Clone the template's first column descriptor as the shape for each of our
+    # columns (preserves every required field: type/displayAs/visible/order/…).
+    proto = w["spec"]["encodings"]["columns"][0]
+    cols_out = []
+    for i, c in enumerate(columns):
+        cc = copy.deepcopy(proto)
+        is_num = c in numeric
+        cc["fieldName"] = c
+        cc["title"] = c
+        cc["displayName"] = c
+        cc["order"] = 100000 + i
+        cc["type"] = "integer" if is_num else "string"
+        cc["displayAs"] = "number" if is_num else "string"
+        cc["alignContent"] = "right" if is_num else "left"
+        if is_num:
+            cc["numberFormat"] = "0.00"
+        cols_out.append(cc)
+    w["spec"]["encodings"]["columns"] = cols_out
+    w["spec"]["frame"] = {"showTitle": True, "title": title}
+    return w
 
 
 def _text(name: str, markdown: str) -> dict[str, Any]:

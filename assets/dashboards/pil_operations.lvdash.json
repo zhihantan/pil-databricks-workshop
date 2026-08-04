@@ -104,8 +104,8 @@
                 }
               },
               "frame": {
-                "title": "Schedule Reliability %",
-                "showTitle": true
+                "showTitle": true,
+                "title": "Schedule Reliability %"
               }
             }
           },
@@ -144,8 +144,8 @@
                 }
               },
               "frame": {
-                "title": "Vessel Utilization %",
-                "showTitle": true
+                "showTitle": true,
+                "title": "Vessel Utilization %"
               }
             }
           },
@@ -184,8 +184,8 @@
                 }
               },
               "frame": {
-                "title": "Avg Arrival Delay (hrs)",
-                "showTitle": true
+                "showTitle": true,
+                "title": "Avg Arrival Delay (hrs)"
               }
             }
           },
@@ -238,8 +238,8 @@
                 }
               },
               "frame": {
-                "title": "Schedule Reliability Trend",
-                "showTitle": true
+                "showTitle": true,
+                "title": "Schedule Reliability Trend"
               }
             }
           },
@@ -303,8 +303,8 @@
                 }
               },
               "frame": {
-                "title": "Port Performance (waiting vs turnaround)",
-                "showTitle": true
+                "showTitle": true,
+                "title": "Port Performance (waiting vs turnaround)"
               }
             }
           },
@@ -350,153 +350,63 @@
               }
             ],
             "spec": {
-              "version": 1,
+              "version": 2,
               "widgetType": "table",
               "encodings": {
                 "columns": [
                   {
                     "fieldName": "port_name",
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "imageUrlTemplate": "{{ @ }}",
-                    "imageTitleTemplate": "{{ @ }}",
-                    "imageWidth": "",
-                    "imageHeight": "",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "linkTextTemplate": "{{ @ }}",
-                    "linkTitleTemplate": "{{ @ }}",
-                    "linkOpenInNewTab": true,
+                    "displayName": "port_name",
+                    "title": "port_name",
+                    "order": 100000,
                     "type": "string",
                     "displayAs": "string",
-                    "visible": true,
-                    "order": 100000,
-                    "title": "port_name",
-                    "allowSearch": false,
-                    "alignContent": "left",
-                    "allowHTML": false,
-                    "highlightLinks": false,
-                    "useMonospaceFont": false,
-                    "preserveWhitespace": false,
-                    "displayName": "port_name"
+                    "alignContent": "left"
                   },
                   {
                     "fieldName": "region",
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "imageUrlTemplate": "{{ @ }}",
-                    "imageTitleTemplate": "{{ @ }}",
-                    "imageWidth": "",
-                    "imageHeight": "",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "linkTextTemplate": "{{ @ }}",
-                    "linkTitleTemplate": "{{ @ }}",
-                    "linkOpenInNewTab": true,
+                    "displayName": "region",
+                    "title": "region",
+                    "order": 100001,
                     "type": "string",
                     "displayAs": "string",
-                    "visible": true,
-                    "order": 100001,
-                    "title": "region",
-                    "allowSearch": false,
-                    "alignContent": "left",
-                    "allowHTML": false,
-                    "highlightLinks": false,
-                    "useMonospaceFont": false,
-                    "preserveWhitespace": false,
-                    "displayName": "region"
+                    "alignContent": "left"
                   },
                   {
                     "fieldName": "avg_turnaround_hrs",
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "imageUrlTemplate": "{{ @ }}",
-                    "imageTitleTemplate": "{{ @ }}",
-                    "imageWidth": "",
-                    "imageHeight": "",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "linkTextTemplate": "{{ @ }}",
-                    "linkTitleTemplate": "{{ @ }}",
-                    "linkOpenInNewTab": true,
+                    "displayName": "avg_turnaround_hrs",
+                    "title": "avg_turnaround_hrs",
+                    "order": 100002,
                     "type": "integer",
                     "displayAs": "number",
-                    "visible": true,
-                    "order": 100002,
-                    "title": "avg_turnaround_hrs",
-                    "allowSearch": false,
                     "alignContent": "right",
-                    "allowHTML": false,
-                    "highlightLinks": false,
-                    "useMonospaceFont": false,
-                    "preserveWhitespace": false,
-                    "displayName": "avg_turnaround_hrs",
                     "numberFormat": "0.00"
                   },
                   {
                     "fieldName": "avg_waiting_hrs",
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "imageUrlTemplate": "{{ @ }}",
-                    "imageTitleTemplate": "{{ @ }}",
-                    "imageWidth": "",
-                    "imageHeight": "",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "linkTextTemplate": "{{ @ }}",
-                    "linkTitleTemplate": "{{ @ }}",
-                    "linkOpenInNewTab": true,
+                    "displayName": "avg_waiting_hrs",
+                    "title": "avg_waiting_hrs",
+                    "order": 100003,
                     "type": "integer",
                     "displayAs": "number",
-                    "visible": true,
-                    "order": 100003,
-                    "title": "avg_waiting_hrs",
-                    "allowSearch": false,
                     "alignContent": "right",
-                    "allowHTML": false,
-                    "highlightLinks": false,
-                    "useMonospaceFont": false,
-                    "preserveWhitespace": false,
-                    "displayName": "avg_waiting_hrs",
                     "numberFormat": "0.00"
                   },
                   {
                     "fieldName": "port_calls",
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "imageUrlTemplate": "{{ @ }}",
-                    "imageTitleTemplate": "{{ @ }}",
-                    "imageWidth": "",
-                    "imageHeight": "",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "linkTextTemplate": "{{ @ }}",
-                    "linkTitleTemplate": "{{ @ }}",
-                    "linkOpenInNewTab": true,
+                    "displayName": "port_calls",
+                    "title": "port_calls",
+                    "order": 100004,
                     "type": "integer",
                     "displayAs": "number",
-                    "visible": true,
-                    "order": 100004,
-                    "title": "port_calls",
-                    "allowSearch": false,
                     "alignContent": "right",
-                    "allowHTML": false,
-                    "highlightLinks": false,
-                    "useMonospaceFont": false,
-                    "preserveWhitespace": false,
-                    "displayName": "port_calls",
                     "numberFormat": "0.00"
                   }
                 ]
               },
               "frame": {
-                "title": "Worst-10 Ports by Turnaround",
-                "showTitle": true
+                "showTitle": true,
+                "title": "Worst-10 Ports by Turnaround"
               }
             }
           },
@@ -555,8 +465,8 @@
                 }
               },
               "frame": {
-                "title": "Revenue per TEU Trend",
-                "showTitle": true
+                "showTitle": true,
+                "title": "Revenue per TEU Trend"
               }
             }
           },
@@ -609,8 +519,8 @@
                 }
               },
               "frame": {
-                "title": "Demurrage & Detention Revenue",
-                "showTitle": true
+                "showTitle": true,
+                "title": "Demurrage & Detention Revenue"
               }
             }
           },
@@ -660,11 +570,19 @@
                     "type": "categorical"
                   },
                   "displayName": "trade_lane"
+                },
+                "label": {
+                  "show": true
                 }
               },
               "frame": {
-                "title": "Revenue by Trade Lane",
-                "showTitle": true
+                "showTitle": true,
+                "title": "Revenue by Trade Lane"
+              },
+              "mark": {
+                "colors": [
+                  "#FF3621"
+                ]
               }
             }
           },
@@ -710,152 +628,62 @@
               }
             ],
             "spec": {
-              "version": 1,
+              "version": 2,
               "widgetType": "table",
               "encodings": {
                 "columns": [
                   {
                     "fieldName": "customer_name",
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "imageUrlTemplate": "{{ @ }}",
-                    "imageTitleTemplate": "{{ @ }}",
-                    "imageWidth": "",
-                    "imageHeight": "",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "linkTextTemplate": "{{ @ }}",
-                    "linkTitleTemplate": "{{ @ }}",
-                    "linkOpenInNewTab": true,
+                    "displayName": "customer_name",
+                    "title": "customer_name",
+                    "order": 100000,
                     "type": "string",
                     "displayAs": "string",
-                    "visible": true,
-                    "order": 100000,
-                    "title": "customer_name",
-                    "allowSearch": false,
-                    "alignContent": "left",
-                    "allowHTML": false,
-                    "highlightLinks": false,
-                    "useMonospaceFont": false,
-                    "preserveWhitespace": false,
-                    "displayName": "customer_name"
+                    "alignContent": "left"
                   },
                   {
                     "fieldName": "customer_type",
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "imageUrlTemplate": "{{ @ }}",
-                    "imageTitleTemplate": "{{ @ }}",
-                    "imageWidth": "",
-                    "imageHeight": "",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "linkTextTemplate": "{{ @ }}",
-                    "linkTitleTemplate": "{{ @ }}",
-                    "linkOpenInNewTab": true,
+                    "displayName": "customer_type",
+                    "title": "customer_type",
+                    "order": 100001,
                     "type": "string",
                     "displayAs": "string",
-                    "visible": true,
-                    "order": 100001,
-                    "title": "customer_type",
-                    "allowSearch": false,
-                    "alignContent": "left",
-                    "allowHTML": false,
-                    "highlightLinks": false,
-                    "useMonospaceFont": false,
-                    "preserveWhitespace": false,
-                    "displayName": "customer_type"
+                    "alignContent": "left"
                   },
                   {
                     "fieldName": "industry",
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "imageUrlTemplate": "{{ @ }}",
-                    "imageTitleTemplate": "{{ @ }}",
-                    "imageWidth": "",
-                    "imageHeight": "",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "linkTextTemplate": "{{ @ }}",
-                    "linkTitleTemplate": "{{ @ }}",
-                    "linkOpenInNewTab": true,
+                    "displayName": "industry",
+                    "title": "industry",
+                    "order": 100002,
                     "type": "string",
                     "displayAs": "string",
-                    "visible": true,
-                    "order": 100002,
-                    "title": "industry",
-                    "allowSearch": false,
-                    "alignContent": "left",
-                    "allowHTML": false,
-                    "highlightLinks": false,
-                    "useMonospaceFont": false,
-                    "preserveWhitespace": false,
-                    "displayName": "industry"
+                    "alignContent": "left"
                   },
                   {
                     "fieldName": "freight_revenue_usd",
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "imageUrlTemplate": "{{ @ }}",
-                    "imageTitleTemplate": "{{ @ }}",
-                    "imageWidth": "",
-                    "imageHeight": "",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "linkTextTemplate": "{{ @ }}",
-                    "linkTitleTemplate": "{{ @ }}",
-                    "linkOpenInNewTab": true,
+                    "displayName": "freight_revenue_usd",
+                    "title": "freight_revenue_usd",
+                    "order": 100003,
                     "type": "integer",
                     "displayAs": "number",
-                    "visible": true,
-                    "order": 100003,
-                    "title": "freight_revenue_usd",
-                    "allowSearch": false,
                     "alignContent": "right",
-                    "allowHTML": false,
-                    "highlightLinks": false,
-                    "useMonospaceFont": false,
-                    "preserveWhitespace": false,
-                    "displayName": "freight_revenue_usd",
                     "numberFormat": "0.00"
                   },
                   {
                     "fieldName": "teu",
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "imageUrlTemplate": "{{ @ }}",
-                    "imageTitleTemplate": "{{ @ }}",
-                    "imageWidth": "",
-                    "imageHeight": "",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "linkTextTemplate": "{{ @ }}",
-                    "linkTitleTemplate": "{{ @ }}",
-                    "linkOpenInNewTab": true,
+                    "displayName": "teu",
+                    "title": "teu",
+                    "order": 100004,
                     "type": "integer",
                     "displayAs": "number",
-                    "visible": true,
-                    "order": 100004,
-                    "title": "teu",
-                    "allowSearch": false,
                     "alignContent": "right",
-                    "allowHTML": false,
-                    "highlightLinks": false,
-                    "useMonospaceFont": false,
-                    "preserveWhitespace": false,
-                    "displayName": "teu",
                     "numberFormat": "0.00"
                   }
                 ]
               },
               "frame": {
-                "title": "Top Customers by Revenue",
-                "showTitle": true
+                "showTitle": true,
+                "title": "Top Customers by Revenue"
               }
             }
           },
@@ -925,8 +753,8 @@
                 }
               },
               "frame": {
-                "title": "Fuel Efficiency (mt / 1k TEU-nm)",
-                "showTitle": true
+                "showTitle": true,
+                "title": "Fuel Efficiency (mt / 1k TEU-nm)"
               }
             }
           },
@@ -976,11 +804,19 @@
                     "type": "quantitative"
                   },
                   "displayName": "co2_per_teu_km"
+                },
+                "label": {
+                  "show": true
                 }
               },
               "frame": {
-                "title": "CO\u2082 per TEU-km by Vessel Class",
-                "showTitle": true
+                "showTitle": true,
+                "title": "CO\u2082 per TEU-km by Vessel Class"
+              },
+              "mark": {
+                "colors": [
+                  "#FF3621"
+                ]
               }
             }
           },
@@ -1030,11 +866,19 @@
                     "type": "quantitative"
                   },
                   "displayName": "fuel_eff"
+                },
+                "label": {
+                  "show": true
                 }
               },
               "frame": {
-                "title": "LNG vs VLSFO Fuel Efficiency",
-                "showTitle": true
+                "showTitle": true,
+                "title": "LNG vs VLSFO Fuel Efficiency"
+              },
+              "mark": {
+                "colors": [
+                  "#FF3621"
+                ]
               }
             }
           },
@@ -1079,8 +923,8 @@
                 }
               },
               "frame": {
-                "title": "Total Tokens",
-                "showTitle": true
+                "showTitle": true,
+                "title": "Total Tokens"
               }
             }
           },
@@ -1119,8 +963,8 @@
                 }
               },
               "frame": {
-                "title": "Requests",
-                "showTitle": true
+                "showTitle": true,
+                "title": "Requests"
               }
             }
           },
@@ -1159,8 +1003,8 @@
                 }
               },
               "frame": {
-                "title": "Est. Cost (USD)",
-                "showTitle": true
+                "showTitle": true,
+                "title": "Est. Cost (USD)"
               }
             }
           },
@@ -1213,8 +1057,8 @@
                 }
               },
               "frame": {
-                "title": "Tokens per Day",
-                "showTitle": true
+                "showTitle": true,
+                "title": "Tokens per Day"
               }
             }
           },
@@ -1267,8 +1111,8 @@
                 }
               },
               "frame": {
-                "title": "Errors per Day",
-                "showTitle": true
+                "showTitle": true,
+                "title": "Errors per Day"
               }
             }
           },
@@ -1314,154 +1158,64 @@
               }
             ],
             "spec": {
-              "version": 1,
+              "version": 2,
               "widgetType": "table",
               "encodings": {
                 "columns": [
                   {
                     "fieldName": "endpoint",
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "imageUrlTemplate": "{{ @ }}",
-                    "imageTitleTemplate": "{{ @ }}",
-                    "imageWidth": "",
-                    "imageHeight": "",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "linkTextTemplate": "{{ @ }}",
-                    "linkTitleTemplate": "{{ @ }}",
-                    "linkOpenInNewTab": true,
+                    "displayName": "endpoint",
+                    "title": "endpoint",
+                    "order": 100000,
                     "type": "string",
                     "displayAs": "string",
-                    "visible": true,
-                    "order": 100000,
-                    "title": "endpoint",
-                    "allowSearch": false,
-                    "alignContent": "left",
-                    "allowHTML": false,
-                    "highlightLinks": false,
-                    "useMonospaceFont": false,
-                    "preserveWhitespace": false,
-                    "displayName": "endpoint"
+                    "alignContent": "left"
                   },
                   {
                     "fieldName": "request_count",
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "imageUrlTemplate": "{{ @ }}",
-                    "imageTitleTemplate": "{{ @ }}",
-                    "imageWidth": "",
-                    "imageHeight": "",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "linkTextTemplate": "{{ @ }}",
-                    "linkTitleTemplate": "{{ @ }}",
-                    "linkOpenInNewTab": true,
+                    "displayName": "request_count",
+                    "title": "request_count",
+                    "order": 100001,
                     "type": "integer",
                     "displayAs": "number",
-                    "visible": true,
-                    "order": 100001,
-                    "title": "request_count",
-                    "allowSearch": false,
                     "alignContent": "right",
-                    "allowHTML": false,
-                    "highlightLinks": false,
-                    "useMonospaceFont": false,
-                    "preserveWhitespace": false,
-                    "displayName": "request_count",
                     "numberFormat": "0.00"
                   },
                   {
                     "fieldName": "total_tokens",
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "imageUrlTemplate": "{{ @ }}",
-                    "imageTitleTemplate": "{{ @ }}",
-                    "imageWidth": "",
-                    "imageHeight": "",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "linkTextTemplate": "{{ @ }}",
-                    "linkTitleTemplate": "{{ @ }}",
-                    "linkOpenInNewTab": true,
+                    "displayName": "total_tokens",
+                    "title": "total_tokens",
+                    "order": 100002,
                     "type": "integer",
                     "displayAs": "number",
-                    "visible": true,
-                    "order": 100002,
-                    "title": "total_tokens",
-                    "allowSearch": false,
                     "alignContent": "right",
-                    "allowHTML": false,
-                    "highlightLinks": false,
-                    "useMonospaceFont": false,
-                    "preserveWhitespace": false,
-                    "displayName": "total_tokens",
                     "numberFormat": "0.00"
                   },
                   {
                     "fieldName": "error_count",
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "imageUrlTemplate": "{{ @ }}",
-                    "imageTitleTemplate": "{{ @ }}",
-                    "imageWidth": "",
-                    "imageHeight": "",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "linkTextTemplate": "{{ @ }}",
-                    "linkTitleTemplate": "{{ @ }}",
-                    "linkOpenInNewTab": true,
+                    "displayName": "error_count",
+                    "title": "error_count",
+                    "order": 100003,
                     "type": "integer",
                     "displayAs": "number",
-                    "visible": true,
-                    "order": 100003,
-                    "title": "error_count",
-                    "allowSearch": false,
                     "alignContent": "right",
-                    "allowHTML": false,
-                    "highlightLinks": false,
-                    "useMonospaceFont": false,
-                    "preserveWhitespace": false,
-                    "displayName": "error_count",
                     "numberFormat": "0.00"
                   },
                   {
                     "fieldName": "est_cost_usd",
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "imageUrlTemplate": "{{ @ }}",
-                    "imageTitleTemplate": "{{ @ }}",
-                    "imageWidth": "",
-                    "imageHeight": "",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "linkTextTemplate": "{{ @ }}",
-                    "linkTitleTemplate": "{{ @ }}",
-                    "linkOpenInNewTab": true,
+                    "displayName": "est_cost_usd",
+                    "title": "est_cost_usd",
+                    "order": 100004,
                     "type": "integer",
                     "displayAs": "number",
-                    "visible": true,
-                    "order": 100004,
-                    "title": "est_cost_usd",
-                    "allowSearch": false,
                     "alignContent": "right",
-                    "allowHTML": false,
-                    "highlightLinks": false,
-                    "useMonospaceFont": false,
-                    "preserveWhitespace": false,
-                    "displayName": "est_cost_usd",
                     "numberFormat": "0.00"
                   }
                 ]
               },
               "frame": {
-                "title": "Usage by Endpoint",
-                "showTitle": true
+                "showTitle": true,
+                "title": "Usage by Endpoint"
               }
             }
           },
@@ -1499,98 +1253,44 @@
               }
             ],
             "spec": {
-              "version": 1,
+              "version": 2,
               "widgetType": "table",
               "encodings": {
                 "columns": [
                   {
                     "fieldName": "user_name",
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "imageUrlTemplate": "{{ @ }}",
-                    "imageTitleTemplate": "{{ @ }}",
-                    "imageWidth": "",
-                    "imageHeight": "",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "linkTextTemplate": "{{ @ }}",
-                    "linkTitleTemplate": "{{ @ }}",
-                    "linkOpenInNewTab": true,
+                    "displayName": "user_name",
+                    "title": "user_name",
+                    "order": 100000,
                     "type": "string",
                     "displayAs": "string",
-                    "visible": true,
-                    "order": 100000,
-                    "title": "user_name",
-                    "allowSearch": false,
-                    "alignContent": "left",
-                    "allowHTML": false,
-                    "highlightLinks": false,
-                    "useMonospaceFont": false,
-                    "preserveWhitespace": false,
-                    "displayName": "user_name"
+                    "alignContent": "left"
                   },
                   {
                     "fieldName": "request_count",
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "imageUrlTemplate": "{{ @ }}",
-                    "imageTitleTemplate": "{{ @ }}",
-                    "imageWidth": "",
-                    "imageHeight": "",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "linkTextTemplate": "{{ @ }}",
-                    "linkTitleTemplate": "{{ @ }}",
-                    "linkOpenInNewTab": true,
+                    "displayName": "request_count",
+                    "title": "request_count",
+                    "order": 100001,
                     "type": "integer",
                     "displayAs": "number",
-                    "visible": true,
-                    "order": 100001,
-                    "title": "request_count",
-                    "allowSearch": false,
                     "alignContent": "right",
-                    "allowHTML": false,
-                    "highlightLinks": false,
-                    "useMonospaceFont": false,
-                    "preserveWhitespace": false,
-                    "displayName": "request_count",
                     "numberFormat": "0.00"
                   },
                   {
                     "fieldName": "total_tokens",
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "imageUrlTemplate": "{{ @ }}",
-                    "imageTitleTemplate": "{{ @ }}",
-                    "imageWidth": "",
-                    "imageHeight": "",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "linkTextTemplate": "{{ @ }}",
-                    "linkTitleTemplate": "{{ @ }}",
-                    "linkOpenInNewTab": true,
+                    "displayName": "total_tokens",
+                    "title": "total_tokens",
+                    "order": 100002,
                     "type": "integer",
                     "displayAs": "number",
-                    "visible": true,
-                    "order": 100002,
-                    "title": "total_tokens",
-                    "allowSearch": false,
                     "alignContent": "right",
-                    "allowHTML": false,
-                    "highlightLinks": false,
-                    "useMonospaceFont": false,
-                    "preserveWhitespace": false,
-                    "displayName": "total_tokens",
                     "numberFormat": "0.00"
                   }
                 ]
               },
               "frame": {
-                "title": "Usage by User",
-                "showTitle": true
+                "showTitle": true,
+                "title": "Usage by User"
               }
             }
           },
