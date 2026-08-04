@@ -67,6 +67,14 @@ def invoice_extraction_prompt(document_text: str) -> str:
 INSPECTION_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
+        # reasoning is FIRST and required so the model must describe the visual
+        # evidence before committing to a label (chain-of-thought lifts vision
+        # accuracy markedly on these schematic images).
+        "reasoning": {
+            "type": "string",
+            "description": "Briefly describe the marks/anomalies you see on the "
+            "container body and doors before classifying.",
+        },
         "damage": {"type": "string", "enum": ["none", "minor", "major"]},
         "damage_type": {
             "type": "string",
@@ -75,20 +83,40 @@ INSPECTION_SCHEMA: dict[str, Any] = {
         "confidence": {"type": "number", "description": "0.0–1.0"},
         "recommended_action": {"type": "string"},
     },
-    "required": ["damage", "damage_type", "confidence", "recommended_action"],
+    "required": ["reasoning", "damage", "damage_type", "confidence", "recommended_action"],
 }
 
+# These workshop images are SCHEMATIC side-view diagrams of a container (a
+# colored rectangle with vertical corrugation lines and a door panel on the
+# right), not photographs. Damage is drawn with a specific, consistent visual
+# vocabulary — the model scores far better when told what that vocabulary is,
+# because otherwise it dismisses the stylized marks as paint/shadow and returns
+# "none". Keep this description in lockstep with datagen `_draw_damage`.
 VISION_SYSTEM_PROMPT = (
-    "You are a container-inspection assistant. Assess the shipping container in "
-    "the image for structural damage. Classify overall damage as none/minor/"
-    "major, identify the primary damage type, give a confidence 0-1, and "
-    "recommend an action (e.g. 'release', 'flag for manual inspection', "
-    "'remove from service'). Return only JSON matching the schema."
+    "You are a container-inspection assistant reviewing SCHEMATIC diagram images "
+    "of shipping containers (a flat colored side view with vertical corrugation "
+    "lines and a door panel on the right edge) — treat any drawn mark as a real "
+    "defect, not paint or shadow. Damage is encoded like this:\n"
+    "• DENT: dark gray/black filled OVAL blobs on the container face (each blob "
+    "is a dent). A few small blobs = minor; many or large blobs = major.\n"
+    "• RUST: reddish-brown circular SPECKLES/patches scattered on the face. "
+    "Sparse light speckling = minor; dense or large brown patches = major.\n"
+    "• DOOR_MISALIGNMENT: a red/dark line or wedge at the right-hand door edge, "
+    "showing the door skewed out of alignment. Small skew = minor; large skew "
+    "extending past the container edge = major.\n"
+    "A container with NONE of these marks (clean face, aligned doors) is 'none'. "
+    "If you see ANY dent blob, rust speckle, or door skew, it is NOT 'none' — "
+    "choose minor or major by extent. First state what you see in 'reasoning', "
+    "then classify. Recommend an action: 'release' (none), 'flag for manual "
+    "inspection' (minor), or 'remove from service' (major). Return only JSON "
+    "matching the schema."
 )
 
 VISION_USER_PROMPT = (
-    "Inspect this container image. Return JSON: damage (none|minor|major), "
-    "damage_type, confidence (0-1), recommended_action."
+    "Inspect this container diagram. Look carefully across the whole face and the "
+    "right-hand doors for dark dent blobs, brown rust speckles, or a red door-skew "
+    "mark. Describe what you see in 'reasoning', then return JSON with damage "
+    "(none|minor|major), damage_type, confidence (0-1), and recommended_action."
 )
 
 # Image formats accepted by the multimodal FMAPI (and the app upload zone).

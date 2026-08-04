@@ -270,26 +270,63 @@ def generate_container_images(
 
 
 def _draw_damage(d, severity, dtype, cx0, cy0, cx1, cy1, rng) -> None:
-    """Overlay a damage effect onto the container body."""
-    intensity = 1 if severity == "minor" else 3
+    """Overlay a physically-plausible damage effect onto the container body.
+
+    Minor vs major is distinguished by clearly-visible extent — count/size of
+    dents, density of corrosion, size of the door gap — not by a few-pixel
+    geometric offset, so both a human and a vision model can tell them apart.
+    Dents are shaded (dark crease + light highlight rim) so they read as metal
+    deformation rather than a flat painted circle; rust is an irregular
+    corroded patch with streaks; door misalignment visibly displaces the door
+    panel leaving a gap.
+    """
+    is_major = severity == "major"
     if dtype == "dent":
-        for _ in range(intensity * 2):
-            x = rng.randint(cx0 + 40, cx1 - 140)
-            y = rng.randint(cy0 + 30, cy1 - 30)
-            r = rng.randint(10, 24) * intensity
-            d.ellipse([x, y, x + r, y + r // 2], fill=(20, 20, 20))
-            d.ellipse([x + 3, y + 2, x + r - 3, y + r // 2 - 2], fill=(70, 70, 70))
+        # minor: 1-2 modest dents; major: 4-6 large dents (clearly more/bigger).
+        count = rng.randint(4, 6) if is_major else rng.randint(1, 2)
+        rmin, rmax = (34, 60) if is_major else (16, 26)
+        for _ in range(count):
+            r = rng.randint(rmin, rmax)
+            x = rng.randint(cx0 + 40, cx1 - 150)
+            y = rng.randint(cy0 + 24, cy1 - 24 - r // 2)
+            h = max(10, r // 2)
+            # Shadowed crease (deep gray) with a soft lighter rim + specular
+            # highlight so the blob reads as a 3D inward dent, not a flat disc.
+            d.ellipse([x - 2, y - 2, x + r + 2, y + h + 2], outline=(210, 210, 210), width=2)
+            d.ellipse([x, y, x + r, y + h], fill=(58, 58, 62))
+            d.ellipse([x + r // 5, y + h // 5, x + r // 2, y + h // 2], fill=(120, 120, 126))
     elif dtype == "rust":
-        for _ in range(intensity * 6):
-            x = rng.randint(cx0 + 20, cx1 - 30)
-            y = rng.randint(cy0 + 20, cy1 - 20)
-            r = rng.randint(4, 10) * intensity
-            d.ellipse([x, y, x + r, y + r], fill=(120, 60, 20))
+        # minor: a couple of small patches; major: a large corroded region.
+        patches = rng.randint(4, 6) if is_major else rng.randint(1, 2)
+        for _ in range(patches):
+            base = rng.randint(24, 46) if is_major else rng.randint(10, 18)
+            x = rng.randint(cx0 + 24, cx1 - 40 - base)
+            y = rng.randint(cy0 + 20, cy1 - 24 - base)
+            # Layered corrosion: dark core, mid-brown body, orange edge bleed +
+            # a few drip streaks (rust runs downward on real containers).
+            for rr, col in ((base, (150, 92, 44)), (int(base * 0.7), (110, 58, 24)),
+                            (int(base * 0.4), (74, 38, 16))):
+                d.ellipse([x, y, x + rr, y + rr], fill=col)
+            for _ in range(3 if is_major else 1):
+                sx = x + rng.randint(0, base)
+                d.line([(sx, y + base // 2), (sx, y + base + rng.randint(6, 22))],
+                       fill=(120, 62, 28), width=2)
     elif dtype == "door_misalignment":
-        offset = 8 * intensity
-        d.line([(cx1 - 120, cy0 - offset), (cx1 - 120, cy1 + offset)],
-               fill=(160, 40, 30), width=5)
-        d.polygon(
-            [(cx1 - 120, cy0), (cx1 - 90, cy0 - offset), (cx1 - 90, cy0 + 20)],
-            fill=(90, 20, 15),
-        )
+        # The door panel occupies the right ~120px (see generate_container_images).
+        # Displace it: minor = small drop + slight skew; major = large drop with
+        # a clear dark gap and the panel jutting past the container frame.
+        dx0 = cx1 - 120
+        drop = 34 if is_major else 12
+        skew = 26 if is_major else 8
+        # Dark gap where the door has pulled away from the frame.
+        d.rectangle([dx0 - 6, cy0, dx0 + 4, cy1], fill=(18, 18, 20))
+        # The displaced door panel (skewed parallelogram, dropped by `drop`).
+        panel = (30, 30, 34)
+        d.polygon([
+            (dx0 + 6, cy0 + drop), (cx1 + (10 if is_major else 0), cy0 + drop - skew // 2),
+            (cx1 + (10 if is_major else 0), cy1 + drop - skew // 2), (dx0 + 6, cy1 + drop),
+        ], fill=panel, outline=(200, 60, 40), width=4)
+        # Red misalignment indicator along the hinge; for major it protrudes
+        # past the container edge to signal severity.
+        over = 22 if is_major else 4
+        d.line([(dx0, cy0 - over), (dx0, cy1 + over)], fill=(190, 40, 30), width=5)
