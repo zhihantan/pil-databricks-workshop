@@ -114,7 +114,7 @@
               }
             ],
             "spec": {
-              "version": 2,
+              "version": 3,
               "widgetType": "counter",
               "encodings": {
                 "value": {
@@ -154,7 +154,7 @@
               }
             ],
             "spec": {
-              "version": 2,
+              "version": 3,
               "widgetType": "counter",
               "encodings": {
                 "value": {
@@ -194,7 +194,7 @@
               }
             ],
             "spec": {
-              "version": 2,
+              "version": 3,
               "widgetType": "counter",
               "encodings": {
                 "value": {
@@ -927,7 +927,7 @@
               }
             ],
             "spec": {
-              "version": 2,
+              "version": 3,
               "widgetType": "counter",
               "encodings": {
                 "value": {
@@ -967,7 +967,7 @@
               }
             ],
             "spec": {
-              "version": 2,
+              "version": 3,
               "widgetType": "counter",
               "encodings": {
                 "value": {
@@ -1007,7 +1007,7 @@
               }
             ],
             "spec": {
-              "version": 2,
+              "version": 3,
               "widgetType": "counter",
               "encodings": {
                 "value": {

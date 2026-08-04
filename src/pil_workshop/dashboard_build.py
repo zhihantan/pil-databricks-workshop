@@ -121,7 +121,9 @@ def _counter(name: str, dataset: str, field: str, title: str) -> dict[str, Any]:
             }
         ],
         "spec": {
-            "version": 2,
+            # Lakeview counters require version 3; with version 2 the renderer
+            # ignores the encodings and shows "Select fields to visualize".
+            "version": 3,
             "widgetType": "counter",
             "encodings": {"value": {"fieldName": field, "displayName": title}},
             "frame": {"title": title, "showTitle": True},
