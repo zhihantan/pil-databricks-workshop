@@ -111,16 +111,17 @@ try:
         print(f"\n  Open: https://{host}/dashboardsv3/{dash_id}/published")
     except Exception:  # noqa: BLE001
         pass
-    # Attach a daily refresh schedule (04:00 Asia/Singapore — after the 03:00
-    # setup job rebuilds the gold layer). Idempotent + best-effort; needs a
-    # warehouse and the Lakeview schedule API.
+    # Attach an HOURLY refresh schedule (at :30, between the top-of-hour job
+    # rebuilds) so the dashboard re-queries against fresh data every hour. This
+    # also exercises the SQL warehouse each hour. Idempotent + best-effort; needs
+    # a warehouse and the Lakeview schedule API. Use "0 0 4 * * ?" for once-daily.
     if dash_id and warehouse_id:
         sched_id = dbx_api.ensure_lakeview_schedule(
-            dash_id, warehouse_id, cron="0 0 4 * * ?",
-            timezone="Asia/Singapore", display_name="Daily refresh", client=wc,
+            dash_id, warehouse_id, cron="0 30 * * * ?",
+            timezone="Asia/Singapore", display_name="Hourly refresh", client=wc,
         )
         if sched_id:
-            ok(f"Daily refresh scheduled (04:00 Asia/Singapore, id={sched_id}).")
+            ok(f"Hourly refresh scheduled (:30 each hour, id={sched_id}).")
         else:
             _serr = getattr(dbx_api.ensure_lakeview_schedule, "last_error", None)
             warn(f"Dashboard schedule not attached ({_serr or 'API unavailable'}); "

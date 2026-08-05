@@ -22,8 +22,10 @@ LOG = get_logger("pil_workshop.job_builder")
 
 JOB_NAME = "PIL Workshop — Daily Setup"
 DEFAULT_TIMEZONE = "Asia/Singapore"  # southeastasia workshop
-# 03:00 daily, Quartz format: sec min hour day-of-month month day-of-week
-DEFAULT_CRON = "0 0 3 * * ?"
+# HOURLY (top of every hour), Quartz format: sec min hour day-of-month month
+# day-of-week. Rebuilds the whole pipeline ~24x/day — a large consumption
+# driver. Set to "0 0 3 * * ?" for the original once-daily (03:00) cadence.
+DEFAULT_CRON = "0 0 * * * ?"
 
 # Serverless notebook tasks share one environment; a few notebooks %pip-install
 # their own heavy deps (reportlab/Pillow/lightgbm/ortools), so the base env is

@@ -153,7 +153,11 @@ SCALES: dict[str, DataScale] = {
         container_images=160,
     ),
 }
-DEFAULT_SCALE = "demo"
+# Default to the FULL (master-prompt) volumes — ~10x the demo preset (6k voyages,
+# 50k containers, 400k bookings, 3M container events, 200 invoice PDFs, 160
+# container images). This drives materially higher compute + AI-function/vision
+# token consumption end-to-end. Switch back to "demo" for a fast, low-cost run.
+DEFAULT_SCALE = "full"
 
 
 def get_scale(name: str | None = None) -> DataScale:

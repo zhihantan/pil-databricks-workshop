@@ -151,19 +151,20 @@ def ensure_lakeview_schedule(
     dashboard_id: str,
     warehouse_id: str,
     *,
-    cron: str = "0 0 4 * * ?",
+    cron: str = "0 30 * * * ?",
     timezone: str = "Asia/Singapore",
-    display_name: str = "Daily refresh",
+    display_name: str = "Hourly refresh",
     client: Any | None = None,
 ) -> str | None:
-    """Attach (or update) a daily refresh schedule on a Lakeview dashboard.
+    """Attach (or update) a refresh schedule on a Lakeview dashboard.
 
     Idempotent: if a schedule with ``display_name`` already exists it is updated
     in place (matched by display name, then by etag), otherwise created. Aligns
-    to the workshop's timezone; the default cron is 04:00 daily — after the
-    03:00 setup job rebuilds the gold layer. Best-effort: returns the schedule
-    id, or ``None`` if the Lakeview schedule API is unavailable / the call fails
-    (the dashboard itself is unaffected). Requires a running warehouse to run.
+    to the workshop's timezone; the default cron is hourly (at :30), between the
+    top-of-hour setup-job rebuilds, so the dashboard re-queries fresh data every
+    hour (and exercises the warehouse). Best-effort: returns the schedule id, or
+    ``None`` if the Lakeview schedule API is unavailable / the call fails (the
+    dashboard itself is unaffected). Requires a running warehouse to run.
     """
     wc = _ws(client)
     lakeview = getattr(wc, "lakeview", None)
@@ -791,11 +792,15 @@ def ensure_model_serving_endpoint(
     endpoint_name: str,
     model_name: str,
     model_version: str,
-    workload_size: str = "Small",
-    scale_to_zero: bool = True,
+    workload_size: str = "Medium",
+    scale_to_zero: bool = False,
     client: Any | None = None,
 ) -> Any | None:
     """Create/update a model-serving endpoint for a UC-registered model.
+
+    Defaults are sized for higher consumption: a **Medium** workload that is
+    **always-on** (scale_to_zero=False) bills continuously rather than idling to
+    zero. For a low-cost footprint use workload_size="Small", scale_to_zero=True.
 
     Docs: https://docs.databricks.com/api/workspace/servingendpoints/create
     """
