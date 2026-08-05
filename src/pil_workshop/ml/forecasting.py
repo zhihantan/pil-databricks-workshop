@@ -89,6 +89,84 @@ def make_lag_features(
     return feats
 
 
+def make_enriched_features(
+    values: np.ndarray,
+    lags: tuple[int, ...] = (1, 2, 3, 7, 14, 21, 28, 35),
+    roll_windows: tuple[int, ...] = (7, 14, 28, 56),
+    ewma_spans: tuple[int, ...] = (7, 28),
+) -> dict[str, np.ndarray]:
+    """Richer feature set than :func:`make_lag_features` for the global LightGBM.
+
+    Adds more lags, more rolling-mean windows, and (leakage-safe, shifted-by-one)
+    EWMA levels. All arrays are NaN-padded to align with ``values``; the caller
+    drops warmup rows and adds calendar/categorical features. Kept dependency-free
+    (NumPy only) so it stays unit-testable off-platform.
+    """
+    values = np.asarray(values, dtype=float)
+    n = values.size
+    feats: dict[str, np.ndarray] = {}
+    for lag in lags:
+        arr = np.full(n, np.nan)
+        if n > lag:
+            arr[lag:] = values[:-lag]
+        feats[f"lag_{lag}"] = arr
+    for w in roll_windows:
+        arr = np.full(n, np.nan)
+        for i in range(n):
+            if i >= w:
+                arr[i] = values[i - w:i].mean()
+        feats[f"rollmean_{w}"] = arr
+    for span in ewma_spans:
+        # ewm over the raw series, then shift by 1 so row i uses only past data.
+        ew = _ewma(values, span)
+        arr = np.full(n, np.nan)
+        arr[1:] = ew[:-1]
+        feats[f"ewma_{span}"] = arr
+    return feats
+
+
+def _ewma(values: np.ndarray, span: int) -> np.ndarray:
+    """Exponentially weighted moving average (pandas-free)."""
+    values = np.asarray(values, dtype=float)
+    alpha = 2.0 / (span + 1.0)
+    out = np.empty_like(values)
+    if values.size == 0:
+        return out
+    out[0] = values[0]
+    for i in range(1, values.size):
+        out[i] = alpha * values[i] + (1 - alpha) * out[i - 1]
+    return out
+
+
+def wape_aggregated(
+    actual: np.ndarray, forecast: np.ndarray, groups: np.ndarray, period: int = 0
+) -> float:
+    """WAPE after aggregating within each group (and optionally into periods).
+
+    Daily intermittent/Poisson demand has a high WAPE floor (day-to-day noise);
+    inventory planning cares about demand summed over a lead-time/period. This
+    sums actual & forecast per ``group`` (e.g. sku) — and, if ``period`` > 0, into
+    consecutive ``period``-length buckets within each group — then computes WAPE
+    on those totals. ``period=0`` = one total per group (full-horizon demand).
+    """
+    actual = np.asarray(actual, dtype=float)
+    forecast = np.asarray(forecast, dtype=float)
+    groups = np.asarray(groups)
+    num = den = 0.0
+    for g in np.unique(groups):
+        m = groups == g
+        a, f = actual[m], forecast[m]
+        if period and a.size:
+            idx = np.arange(a.size) // period
+            a = np.array([a[idx == k].sum() for k in np.unique(idx)])
+            f = np.array([f[idx == k].sum() for k in np.unique(idx)])
+        else:
+            a, f = np.array([a.sum()]), np.array([f.sum()])
+        num += np.abs(a - f).sum()
+        den += np.abs(a).sum()
+    return float(num / den) if den else float("nan")
+
+
 def wape(actual: np.ndarray, forecast: np.ndarray) -> float:
     """Weighted Absolute Percentage Error = sum|a-f| / sum|a| (as a fraction).
 

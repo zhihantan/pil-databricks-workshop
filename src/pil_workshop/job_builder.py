@@ -39,6 +39,7 @@ ENVIRONMENT_DEPS = [
     "openai",
     "databricks-sdk>=0.86",
     "mlflow>=2.16",
+    "matplotlib>=3.7",  # notebooks 11/12 log plots as MLflow artifacts
 ]
 
 

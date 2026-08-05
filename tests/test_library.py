@@ -13,7 +13,15 @@ import pytest
 
 from pil_workshop import config, datagen, llm
 from pil_workshop.datagen.iso6346 import check_digit, container_number, is_valid
-from pil_workshop.ml import croston, mase, seasonal_naive, tsb, wape
+from pil_workshop.ml import (
+    croston,
+    make_enriched_features,
+    mase,
+    seasonal_naive,
+    tsb,
+    wape,
+    wape_aggregated,
+)
 
 
 # --- llm.py: the single source of truth for endpoints ---------------------
@@ -106,6 +114,34 @@ def test_croston_tsb_positive_for_intermittent():
 
 def test_wape_handles_all_zero_actual():
     assert wape(np.zeros(3), np.zeros(3)) == 0.0
+
+
+def test_enriched_features_no_leakage_and_warmup():
+    v = np.arange(80, dtype=float)
+    f = make_enriched_features(v)
+    # lag_k[i] must equal the value k steps earlier (no future leakage).
+    assert f["lag_1"][10] == v[9]
+    assert f["lag_7"][20] == v[13]
+    # warmup rows (before the longest lag / rolling window) are NaN.
+    assert np.isnan(f["lag_35"][5])
+    assert np.isnan(f["rollmean_56"][10])
+    # EWMA is shifted by one (row 0 has no past → NaN).
+    assert np.isnan(f["ewma_7"][0])
+    assert {"lag_1", "lag_35", "rollmean_56", "ewma_7", "ewma_28"} <= set(f)
+
+
+def test_wape_aggregated_by_group_and_period():
+    # Two groups; each group's TOTAL matches exactly → aggregated WAPE 0,
+    # even though the per-day values differ (daily WAPE would be > 0).
+    actual = np.array([1.0, 1.0, 1.0, 5.0, 5.0, 5.0])
+    forecast = np.array([0.0, 0.0, 3.0, 4.0, 5.0, 6.0])
+    groups = np.array([0, 0, 0, 1, 1, 1])
+    assert abs(wape_aggregated(actual, forecast, groups, period=0)) < 1e-9
+    assert wape(actual, forecast) > 0
+    # period bucketing: identical series → 0 regardless of period length.
+    a = np.arange(14, dtype=float)
+    g = np.zeros(14)
+    assert wape_aggregated(a, a, g, period=7) == 0.0
 
 
 # --- Genie serialized_space builder (dbx_api) ---------------------------------

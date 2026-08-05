@@ -8,11 +8,13 @@ notebooks (11, 12) orchestrate Spark/MLflow/serving around these primitives.
 
 from .forecasting import (
     croston,
+    make_enriched_features,
     make_lag_features,
     mase,
     seasonal_naive,
     tsb,
     wape,
+    wape_aggregated,
 )
 from .optimization import (
     build_min_cost_flow,
@@ -25,7 +27,9 @@ __all__ = [
     "tsb",
     "seasonal_naive",
     "make_lag_features",
+    "make_enriched_features",
     "wape",
+    "wape_aggregated",
     "mase",
     "build_min_cost_flow",
     "solve_min_cost_flow",

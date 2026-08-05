@@ -12,6 +12,13 @@
 # MAGIC    windows) around Singapore, solved with OR-Tools CP-SAT routing.
 # MAGIC
 # MAGIC Solvers live in `pil_workshop.ml.optimization` (unit-tested off-platform).
+# MAGIC
+# MAGIC **MLflow for prescriptive analytics:** optimization isn't model *training*,
+# MAGIC but MLflow is just as useful for it — we log each solve as a run with its
+# MAGIC **parameters** (network size, cost assumptions, vehicles), **metrics** (total
+# MAGIC cost, moves, savings vs. a naive baseline, solve time, route time), and
+# MAGIC **artifacts** (the plan CSV + a flow/route plot). That makes optimization runs
+# MAGIC comparable and auditable over time, exactly like ML experiments.
 
 # COMMAND ----------
 
@@ -45,6 +52,7 @@ _add_repo_src_to_path()
 # file. The solvers we use (min_cost_flow, routing) only need protobuf at runtime
 # (already present), so install with --no-deps to leave the core stack intact.
 # MAGIC %pip install --no-deps "ortools==9.11.4210"
+# MAGIC %pip install "matplotlib>=3.7"
 
 # COMMAND ----------
 
@@ -77,6 +85,20 @@ silver = f"`{CATALOG}`.`{config.SILVER}`"
 gold = f"`{CATALOG}`.`{config.GOLD}`"
 
 banner("12 · Route & network optimization (OR-Tools)")
+
+# MLflow tracks each optimization solve (params/metrics/artifacts). Best-effort:
+# a tracking failure never blocks writing the plan to gold.
+import time as _time
+
+import mlflow
+
+try:
+    from databricks.sdk import WorkspaceClient
+    _me = WorkspaceClient().current_user.me().user_name
+    mlflow.set_experiment(f"/Users/{_me}/pil_workshop_optimization")
+    ok(f"MLflow experiment: /Users/{_me}/pil_workshop_optimization")
+except Exception as _exc:  # noqa: BLE001 - fall back to ambient experiment
+    warn(f"Could not set a named experiment (using ambient): {_exc}")
 
 # COMMAND ----------
 
@@ -148,34 +170,79 @@ for s in sup_nodes:
         unit_costs[(s, d)] = _dist_cost(s, d)
 
 if sup_nodes and def_nodes:
-    spec = build_min_cost_flow(supplies, unit_costs)
-    result = solve_min_cost_flow(spec)
-    ok(f"Min-cost flow: {result['status']} · total cost ${result['total_cost']:,}")
+    with mlflow.start_run(run_name="empty_repositioning_mincostflow") as _run:
+        mlflow.set_tags({"use_case": "route_optimization",
+                         "problem": "empty_container_repositioning", "solver": "or-tools-mcf"})
+        mlflow.log_params({
+            "n_ports": len(imbalance), "n_surplus_ports": len(sup_nodes),
+            "n_deficit_ports": len(def_nodes), "n_lanes": len(unit_costs),
+            "cost_base": 50, "cost_per_dist": 8, "units_per_container": 20,
+        })
+        _t0 = _time.perf_counter()
+        spec = build_min_cost_flow(supplies, unit_costs)
+        result = solve_min_cost_flow(spec)
+        solve_ms = int((_time.perf_counter() - _t0) * 1000)
+        ok(f"Min-cost flow: {result['status']} · total cost ${result['total_cost']:,}")
 
-    name_by_id = {int(r.port_id): r.port_name for r in imbalance.itertuples()}
-    plan_rows = [{
-        "from_port_id": u, "from_port": name_by_id.get(u, str(u)),
-        "to_port_id": v, "to_port": name_by_id.get(v, str(v)),
-        "containers": flow, "cost_usd": cost,
-    } for (u, v, flow, cost) in result["flows"]]
+        name_by_id = {int(r.port_id): r.port_name for r in imbalance.itertuples()}
+        plan_rows = [{
+            "from_port_id": u, "from_port": name_by_id.get(u, str(u)),
+            "to_port_id": v, "to_port": name_by_id.get(v, str(v)),
+            "containers": flow, "cost_usd": cost,
+        } for (u, v, flow, cost) in result["flows"]]
 
-    # Estimated savings vs. a naive "ship everything from the single biggest
-    # surplus" strategy (a common baseline).
-    naive_cost = sum(
-        r["containers"] * _dist_cost(sup_nodes[0], r["to_port_id"]) for r in plan_rows
-    )
-    savings = max(0, naive_cost - result["total_cost"])
-    print(f"Estimated savings vs naive single-hub plan: ${savings:,.0f}")
+        # Estimated savings vs. a naive "ship everything from the single biggest
+        # surplus" strategy (a common baseline).
+        naive_cost = sum(
+            r["containers"] * _dist_cost(sup_nodes[0], r["to_port_id"]) for r in plan_rows
+        )
+        savings = max(0, naive_cost - result["total_cost"])
+        savings_pct = (savings / naive_cost * 100) if naive_cost else 0.0
+        print(f"Estimated savings vs naive single-hub plan: ${savings:,.0f} "
+              f"({savings_pct:.0f}%)")
 
-    if plan_rows:
-        plan_sdf = spark.createDataFrame(pd.DataFrame(plan_rows))
-        plan_sdf.write.format("delta").mode("overwrite").option(
-            "overwriteSchema", "true").saveAsTable(f"{gold}.repositioning_plan")
-        ok(f"Wrote {len(plan_rows)} moves → gold.repositioning_plan")
-        banner("Top repositioning moves", char="-")
-        print(summary_table(
-            sorted(plan_rows, key=lambda r: -r["containers"])[:8],
-            ["from_port", "to_port", "containers", "cost_usd"]))
+        total_containers = sum(r["containers"] for r in plan_rows)
+        mlflow.log_metrics({
+            "total_cost_usd": float(result["total_cost"]),
+            "naive_cost_usd": float(naive_cost),
+            "savings_usd": float(savings),
+            "savings_pct": float(savings_pct),
+            "n_moves": len(plan_rows),
+            "total_containers": float(total_containers),
+            "solve_ms": solve_ms,
+        })
+
+        if plan_rows:
+            plan_pd = pd.DataFrame(plan_rows)
+            plan_sdf = spark.createDataFrame(plan_pd)
+            plan_sdf.write.format("delta").mode("overwrite").option(
+                "overwriteSchema", "true").saveAsTable(f"{gold}.repositioning_plan")
+            ok(f"Wrote {len(plan_rows)} moves → gold.repositioning_plan")
+            banner("Top repositioning moves", char="-")
+            print(summary_table(
+                sorted(plan_rows, key=lambda r: -r["containers"])[:8],
+                ["from_port", "to_port", "containers", "cost_usd"]))
+
+            # Artifacts: the full plan CSV + an optimized-vs-naive cost bar.
+            import tempfile
+
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            _ad = tempfile.mkdtemp()
+            _csv = os.path.join(_ad, "repositioning_plan.csv")
+            plan_pd.to_csv(_csv, index=False)
+            _fig, _ax = plt.subplots(figsize=(5, 3.5))
+            _ax.bar(["optimized", "naive single-hub"],
+                    [result["total_cost"], naive_cost], color=["#0E7C86", "#E4572E"])
+            _ax.set_title(f"Repositioning cost — {savings_pct:.0f}% saved by optimization")
+            _ax.set_ylabel("USD")
+            _fig.tight_layout()
+            _png = os.path.join(_ad, "cost_comparison.png")
+            _fig.savefig(_png, dpi=120); plt.close(_fig)
+            mlflow.log_artifact(_csv, artifact_path="plan")
+            mlflow.log_artifact(_png, artifact_path="plan")
+            ok("Logged plan CSV + cost-comparison plot to the MLflow run.")
 else:
     ok("Network already balanced — no repositioning needed (rare with this data).")
 
@@ -196,11 +263,24 @@ dm = [[int(abs(pts[i][0] - pts[j][0]) + abs(pts[i][1] - pts[j][1])) * 3
 time_windows = [(0, 480)] + [(int(rng.integers(0, 180)),
                               int(rng.integers(240, 480))) for _ in range(n_stops - 1)]
 
-vrptw = solve_vrptw(dm, time_windows, num_vehicles=3, depot=0)
-ok(f"VRPTW: {vrptw['status']} · {len(vrptw['routes'])} routes · "
-   f"total time {vrptw['total_time']} min")
-for r in vrptw["routes"]:
-    print(f"  Vehicle {r['vehicle']}: stops {r['stops']} ({r['route_time']} min)")
+with mlflow.start_run(run_name="drayage_vrptw_singapore") as _vrun:
+    mlflow.set_tags({"use_case": "route_optimization", "problem": "drayage_vrptw",
+                     "solver": "or-tools-routing"})
+    mlflow.log_params({"n_stops": n_stops, "num_vehicles": 3, "depot": 0})
+    _t0 = _time.perf_counter()
+    vrptw = solve_vrptw(dm, time_windows, num_vehicles=3, depot=0)
+    solve_ms = int((_time.perf_counter() - _t0) * 1000)
+    ok(f"VRPTW: {vrptw['status']} · {len(vrptw['routes'])} routes · "
+       f"total time {vrptw['total_time']} min")
+    for r in vrptw["routes"]:
+        print(f"  Vehicle {r['vehicle']}: stops {r['stops']} ({r['route_time']} min)")
+    stops_served = sum(len(r["stops"]) - 2 for r in vrptw["routes"])  # minus depot ends
+    mlflow.log_metrics({
+        "n_routes": len(vrptw["routes"]),
+        "total_route_time_min": float(vrptw["total_time"]),
+        "stops_served": float(stops_served),
+        "solve_ms": solve_ms,
+    })
 
 print("\nStretch goal: expose gold.repositioning_plan in the app as a 'Network' "
       "page, and let planners accept/reject recommended moves into Lakebase.")
