@@ -86,17 +86,16 @@ else:
 # COMMAND ----------
 
 # MAGIC %md ### Deploy via the Lakeview API
-# MAGIC Created under the current user's workspace home so it is easy to find. The
-# MAGIC API wrapper updates in place if a dashboard with the same name exists.
+# MAGIC Created directly in the current user's workspace **home** — alongside the
+# MAGIC Genie spaces and MLflow experiments — rather than in a separate
+# MAGIC `pil_workshop` subfolder. The API wrapper updates in place if a dashboard
+# MAGIC with the same name exists.
 
 # COMMAND ----------
 
 me = wc.current_user.me()
-parent_path = f"/Workspace/Users/{me.user_name}/pil_workshop"
-try:
-    wc.workspace.mkdirs(parent_path)
-except Exception:  # noqa: BLE001
-    pass
+parent_path = f"/Workspace/Users/{me.user_name}"
+print(f"Dashboard parent folder: {parent_path}")
 
 try:
     dash_id = dbx_api.create_or_update_lakeview_dashboard(
