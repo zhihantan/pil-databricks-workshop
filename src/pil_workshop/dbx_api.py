@@ -293,6 +293,56 @@ def create_genie_space(
         return None
 
 
+def update_genie_space(
+    space_id: str,
+    title: str,
+    warehouse_id: str,
+    table_identifiers: list[str],
+    instructions: str,
+    sample_questions: list[str],
+    client: Any | None = None,
+    description: str | None = None,
+    example_sqls: list[dict[str, Any]] | None = None,
+    benchmarks: list[dict[str, Any]] | None = None,
+) -> bool:
+    """Re-sync an existing Genie space with the current config (tables/instructions).
+
+    So re-running setup after new gold views exist (e.g. the inventory/
+    repositioning views built by notebooks 11/12) actually binds them, rather
+    than leaving the reused space stale. Best-effort: returns True on success,
+    False if the SDK lacks ``genie.update_space`` or the call fails (the caller
+    keeps the existing space either way). Uses the same v2 ``serialized_space``.
+    """
+    wc = _ws(client)
+    genie = getattr(wc, "genie", None)
+    update_fn = getattr(genie, "update_space", None) if genie else None
+    if update_fn is None:
+        LOG.info("SDK genie.update_space unavailable; leaving existing space as-is.")
+        update_genie_space.last_error = "genie.update_space unavailable"  # type: ignore[attr-defined]
+        return False
+    serialized = build_serialized_space(
+        table_identifiers, text_instructions=instructions,
+        example_sqls=example_sqls, benchmarks=benchmarks,
+        sample_questions=sample_questions,
+    )
+    try:
+        kwargs: dict[str, Any] = {
+            "space_id": space_id,
+            "warehouse_id": warehouse_id,
+            "serialized_space": serialized,
+            "title": title,
+        }
+        if description:
+            kwargs["description"] = description
+        update_fn(**kwargs)  # pragma: no cover - platform-only
+        update_genie_space.last_error = None  # type: ignore[attr-defined]
+        return True
+    except Exception as exc:  # noqa: BLE001
+        LOG.warning("Genie space update failed (%s); existing space kept.", exc)
+        update_genie_space.last_error = f"{type(exc).__name__}: {exc}"  # type: ignore[attr-defined]
+        return False
+
+
 # ===========================================================================
 # Serving endpoints + AI Gateway config
 # ===========================================================================

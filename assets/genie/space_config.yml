@@ -32,6 +32,13 @@ tables:
   - ${catalog}.gold.metric_sustainability
   - ${catalog}.gold.metric_working_capital
   - ${catalog}.gold.metric_port_dwell_turnaround
+  # Analytics views backing the newer dashboard themes (finance/AR, ML inventory
+  # planning, container repositioning). The last two are built by notebooks 11/12,
+  # so 06 filters the table list to what exists — on a fresh run they bind on the
+  # daily re-run after 11/12 have populated them.
+  - ${catalog}.gold.v_financial_health
+  - ${catalog}.gold.v_inventory_planning
+  - ${catalog}.gold.v_repositioning_summary
 
 # ---------------------------------------------------------------------------
 # General text instructions (concise; semantic-layer-first). Kept well under
@@ -59,6 +66,19 @@ text_instructions: |
     `Avg Waiting Time (hrs)`; dim: `Port`.
   Example: SELECT `Trade Lane`, MEASURE(`Revenue per TEU (USD)`)
   FROM ${catalog}.gold.metric_revenue GROUP BY `Trade Lane`.
+
+  ANALYTICS VIEWS (plain gold views — aggregate directly, no MEASURE()):
+  - v_financial_health — invoice-level receivables: dso_days, days_overdue,
+    aging_bucket (Current/1-30/31-60/61-90/90+ days/Paid), outstanding_usd,
+    is_disputed, status, customer_name, credit_terms. For AR aging, SUM
+    outstanding_usd GROUP BY aging_bucket; "cash at risk" = SUM(outstanding_usd).
+  - v_inventory_planning — spare-parts demand forecast vs reorder logic:
+    stockout_risk ('At risk'/'OK'), suggested_reorder_qty, forecast_value_usd,
+    lead_time_demand, reorder_point, category, depot. "SKUs at risk" =
+    COUNT(*) WHERE stockout_risk='At risk'.
+  - v_repositioning_summary — empty-container OR-Tools plan: containers, cost_usd,
+    cost_per_container, move_type ('Intra-region'/'Inter-region'), from_port/
+    to_port, from_region/to_region. Rank lanes by containers or cost_usd.
 
   BUSINESS DEFINITIONS:
   - A voyage leg is LATE when actual arrival is >24h after pro-forma ETA;
@@ -118,6 +138,29 @@ example_sqls:
       SELECT MEASURE(`DSO (days)`) AS dso_days, MEASURE(`Overdue Count`) AS overdue
       FROM ${catalog}.gold.metric_working_capital
     usage_guidance: "Working-capital KPIs (DSO, overdue, billed) come from metric_working_capital."
+  - question: "Show our accounts-receivable aging — outstanding balance by aging bucket."
+    sql: |
+      SELECT aging_bucket, ROUND(SUM(outstanding_usd),0) AS outstanding_usd,
+             COUNT(*) AS invoices
+      FROM ${catalog}.gold.v_financial_health
+      GROUP BY aging_bucket
+      ORDER BY outstanding_usd DESC
+    usage_guidance: "AR aging + cash-at-risk come from v_financial_health (plain view; SUM outstanding_usd by aging_bucket)."
+  - question: "Which spare parts are at risk of stockout, and what should we reorder?"
+    sql: |
+      SELECT sku_code, category, depot, lead_time_days, suggested_reorder_qty
+      FROM ${catalog}.gold.v_inventory_planning
+      WHERE stockout_risk = 'At risk'
+      ORDER BY suggested_reorder_qty DESC
+      LIMIT 15
+    usage_guidance: "Stockout risk + reorder suggestions come from v_inventory_planning (forecast joined to reorder point)."
+  - question: "What are the largest empty-container repositioning moves and their cost?"
+    sql: |
+      SELECT from_port, to_port, containers, cost_usd
+      FROM ${catalog}.gold.v_repositioning_summary
+      ORDER BY containers DESC
+      LIMIT 10
+    usage_guidance: "Repositioning moves + cost come from v_repositioning_summary (the OR-Tools min-cost-flow plan)."
 
 # ---------------------------------------------------------------------------
 # Common (sample) questions shown to users. These are NOT AI-generated guesses —
@@ -131,6 +174,9 @@ sample_questions:
   - "What is revenue per TEU by trade lane?"
   - "What is our current DSO and how many invoices are overdue?"
   - "Show total revenue by customer industry."
+  - "Show our accounts-receivable aging — outstanding balance by aging bucket."
+  - "Which spare parts are at risk of stockout, and what should we reorder?"
+  - "What are the largest empty-container repositioning moves and their cost?"
 
 # ---------------------------------------------------------------------------
 # Benchmarks (verified Q&A with expected SQL) for systematic accuracy scoring.

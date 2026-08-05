@@ -60,11 +60,36 @@ with open(config_path) as fh:
     raw = fh.read().replace("${catalog}", CATALOG)
 space = yaml.safe_load(raw)
 
-tables = space["tables"]
+requested_tables = space["tables"]
+
+
+def _table_exists(fqn: str) -> bool:
+    """True if a three-level `cat`.`schema`.`obj` exists (view or table)."""
+    try:
+        # strip backticks, split on the last two dots
+        parts = fqn.replace("`", "").split(".")
+        cat, sch, obj = parts[0], parts[1], ".".join(parts[2:])
+        rows = spark.sql(
+            f"SHOW TABLES IN `{cat}`.`{sch}` LIKE '{obj}'"
+        ).collect()
+        return len(rows) > 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# Filter to tables that actually exist now. The finance/inventory/repositioning
+# analytics views (v_*) are built by notebooks 04/11/12; on a fresh run 06 runs
+# before 11/12, so those two bind on the daily re-run once they're populated.
+tables = [t for t in requested_tables if _table_exists(t)]
+skipped = [t for t in requested_tables if t not in tables]
 print(f"Title: {space['title']}")
-print(f"Curated tables ({len(tables)}):")
+print(f"Curated tables ({len(tables)} of {len(requested_tables)} present):")
 for t in tables:
     print(f"  • {t}")
+if skipped:
+    print(f"Deferred (not built yet — will bind on the next run): {len(skipped)}")
+    for t in skipped:
+        print(f"  – {t}")
 print(f"Text instructions: {len(space.get('text_instructions', ''))} chars")
 print(f"Example SQL (trusted assets): {len(space.get('example_sqls', []))}")
 print(f"Sample questions: {len(space.get('sample_questions', []))}")
@@ -104,7 +129,28 @@ except Exception as exc:  # noqa: BLE001
     warn(f"Could not list existing Genie spaces (will create new): {exc}")
 
 if space_id:
-    ok(f"Genie space already exists (id={space_id}); reusing.")
+    ok(f"Genie space already exists (id={space_id}); re-syncing config.")
+    # Re-sync so newly-built views (e.g. the inventory/repositioning analytics
+    # views from notebooks 11/12) and any instruction changes are picked up on
+    # re-runs, instead of leaving the reused space stale.
+    synced = dbx_api.update_genie_space(
+        space_id=space_id,
+        title=space["title"],
+        warehouse_id=warehouse_id,
+        table_identifiers=tables,
+        instructions=space.get("text_instructions", ""),
+        sample_questions=space.get("sample_questions", []),
+        client=wc,
+        description=space.get("description"),
+        example_sqls=space.get("example_sqls"),
+        benchmarks=space.get("benchmarks"),
+    )
+    if synced:
+        ok(f"Re-synced space with {len(tables)} tables + instructions.")
+    else:
+        _upd_err = getattr(dbx_api.update_genie_space, "last_error", None)
+        warn(f"Could not re-sync existing space ({_upd_err}); tables may be "
+             "stale — edit the space in the UI or recreate it if needed.")
 else:
     space_id = dbx_api.create_genie_space(
         title=space["title"],
