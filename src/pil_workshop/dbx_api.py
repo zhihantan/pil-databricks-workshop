@@ -147,6 +147,68 @@ def create_or_update_lakeview_dashboard(
         ) from exc
 
 
+def ensure_lakeview_schedule(
+    dashboard_id: str,
+    warehouse_id: str,
+    *,
+    cron: str = "0 0 4 * * ?",
+    timezone: str = "Asia/Singapore",
+    display_name: str = "Daily refresh",
+    client: Any | None = None,
+) -> str | None:
+    """Attach (or update) a daily refresh schedule on a Lakeview dashboard.
+
+    Idempotent: if a schedule with ``display_name`` already exists it is updated
+    in place (matched by display name, then by etag), otherwise created. Aligns
+    to the workshop's timezone; the default cron is 04:00 daily — after the
+    03:00 setup job rebuilds the gold layer. Best-effort: returns the schedule
+    id, or ``None`` if the Lakeview schedule API is unavailable / the call fails
+    (the dashboard itself is unaffected). Requires a running warehouse to run.
+    """
+    wc = _ws(client)
+    lakeview = getattr(wc, "lakeview", None)
+    if lakeview is None or not hasattr(lakeview, "create_schedule"):
+        LOG.info("Lakeview schedule API unavailable; skipping dashboard schedule.")
+        return None
+    try:
+        from databricks.sdk.service import dashboards as dbx_dash
+
+        cron_sched = dbx_dash.CronSchedule(
+            quartz_cron_expression=cron, timezone_id=timezone
+        )
+        # Find an existing schedule with the same display name (idempotent re-run).
+        existing = None
+        try:
+            for s in lakeview.list_schedules(dashboard_id=dashboard_id):
+                if getattr(s, "display_name", None) == display_name:
+                    existing = s
+                    break
+        except Exception:  # noqa: BLE001 - listing may be unsupported/empty
+            pass
+
+        if existing is not None:
+            sched = dbx_dash.Schedule(
+                cron_schedule=cron_sched, display_name=display_name,
+                warehouse_id=warehouse_id, etag=getattr(existing, "etag", None),
+            )
+            updated = lakeview.update_schedule(
+                dashboard_id=dashboard_id,
+                schedule_id=existing.schedule_id, schedule=sched,
+            )
+            return getattr(updated, "schedule_id", existing.schedule_id)
+
+        sched = dbx_dash.Schedule(
+            cron_schedule=cron_sched, display_name=display_name,
+            warehouse_id=warehouse_id,
+        )
+        created = lakeview.create_schedule(dashboard_id=dashboard_id, schedule=sched)
+        return getattr(created, "schedule_id", None)
+    except Exception as exc:  # noqa: BLE001
+        LOG.warning("Could not attach dashboard schedule: %s", exc)
+        ensure_lakeview_schedule.last_error = f"{type(exc).__name__}: {exc}"  # type: ignore[attr-defined]
+        return None
+
+
 # ===========================================================================
 # Genie spaces
 # ===========================================================================
