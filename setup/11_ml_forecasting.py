@@ -23,10 +23,11 @@
 # MAGIC    plots (forecast-vs-actual, feature importance, per-segment WAPE) and a
 # MAGIC    model-comparison table artifact.
 # MAGIC 3. **Registry + governance** — champion logged with a **signature** +
-# MAGIC    **input_example**, registered to **Unity Catalog**, and tagged with
-# MAGIC    **`@champion` / `@challenger` aliases**.
-# MAGIC 4. **Serving + batch inference** — champion deployed to a serving endpoint;
-# MAGIC    batch scored → `gold.demand_forecasts` (also demoed via `pyfunc`).
+# MAGIC    **input_example** + pinned serving deps, registered to **Unity Catalog**,
+# MAGIC    and tagged with a **`@champion` alias** + metric tags.
+# MAGIC 4. **Batch inference** — champion batch-scored → `gold.demand_forecasts` and
+# MAGIC    reloaded by alias via **`pyfunc`** (the portable inference surface). Real-
+# MAGIC    time REST serving is a one-liner to add where Model Serving is enabled.
 # MAGIC
 # MAGIC Forecasting primitives (Croston/TSB, WAPE/MASE, feature builders) live in
 # MAGIC `pil_workshop.ml.forecasting`, unit-tested off-platform.
@@ -433,14 +434,25 @@ registry_error = None
 try:
     example = train_df[FEATURE_COLS].head(3)
     signature = infer_signature(example, smooth_model.predict(example))
+    # Pin the model's environment explicitly (exact lightgbm we trained with plus
+    # its runtime deps) so the artifact reloads reproducibly via pyfunc and, where
+    # Model Serving is enabled, builds a deterministic serving container.
+    import lightgbm as _lgbv
+    extra_reqs = [
+        f"lightgbm=={_lgbv.__version__}",
+        f"numpy=={np.__version__}",
+        f"pandas=={pd.__version__}",
+        f"scikit-learn=={__import__('sklearn').__version__}",
+    ]
     with mlflow.start_run(run_id=best["child_run_id"]):
         try:
             info = mlflow.lightgbm.log_model(
-                smooth_model, name="model", signature=signature, input_example=example)
+                smooth_model, name="model", signature=signature,
+                input_example=example, extra_pip_requirements=extra_reqs)
         except TypeError:
             info = mlflow.lightgbm.log_model(
                 smooth_model, artifact_path="model", signature=signature,
-                input_example=example)
+                input_example=example, extra_pip_requirements=extra_reqs)
         model_uri = getattr(info, "model_uri", None) or \
             f"runs:/{best['child_run_id']}/model"
         mv = mlflow.register_model(model_uri, model_name)
@@ -514,14 +526,21 @@ ok(f"Wrote {len(future_rows):,} forecast rows → gold.demand_forecasts "
 
 # COMMAND ----------
 
-# MAGIC %md ### 6️⃣ Serve the champion + batch-score demo (pyfunc)
-# MAGIC Deploy the registered champion to a serving endpoint, and demonstrate loading
-# MAGIC it back as a **pyfunc** for local batch scoring (same artifact, two surfaces).
+# MAGIC %md ### 6️⃣ Batch inference via `pyfunc` (load the registered champion back)
+# MAGIC Load the exact registered version by its **`@champion` alias** and score with
+# MAGIC it — the same artifact used for the batch forecast above, now exercised
+# MAGIC through the framework-agnostic `pyfunc` flavor. This is the portable
+# MAGIC inference surface (notebooks, jobs, and Spark UDFs all load models this way).
+# MAGIC
+# MAGIC To additionally expose the champion as a **real-time REST endpoint**, deploy
+# MAGIC it with Model Serving once that capability is enabled on the workspace:
+# MAGIC `dbx_api.ensure_model_serving_endpoint("pil-spare-parts-forecaster",
+# MAGIC model_name, champion_version)` — omitted from the automated run so a
+# MAGIC workspace without Model Serving still completes cleanly.
 
 # COMMAND ----------
 
 if champion_version:
-    # pyfunc round-trip: load the exact registered version and score a sample.
     try:
         pf = mlflow.pyfunc.load_model(f"models:/{model_name}@champion")
         sample = test_df[FEATURE_COLS].head(5)
@@ -530,19 +549,8 @@ if champion_version:
            f"{[round(float(x), 2) for x in np.asarray(preds)[:5]]}")
     except Exception as exc:  # noqa: BLE001
         warn(f"pyfunc load/predict demo skipped: {exc}")
-
-    # Real-time serving endpoint (serverless model serving).
-    try:
-        from pil_workshop import dbx_api
-        wc = WorkspaceClient()
-        dbx_api.ensure_model_serving_endpoint(
-            "pil-spare-parts-forecaster", model_name, str(champion_version), client=wc)
-        ok("Serving endpoint requested: pil-spare-parts-forecaster "
-           f"(model v{champion_version} @champion)")
-    except Exception as exc:  # noqa: BLE001
-        warn(f"Serving endpoint step skipped: {exc}")
 else:
-    warn("No champion version registered; skipping serving + pyfunc demo. "
+    warn("No champion version registered; skipping the pyfunc demo. "
          "See the registry warning above.")
 
 # COMMAND ----------
