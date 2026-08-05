@@ -165,13 +165,13 @@ def create_materialized_views(spark: Any, catalog: str) -> list[tuple[str, str]]
 
 
 # ---------------------------------------------------------------------------
-# Analytics views for the Genie Code "build-your-own dashboard" pages (L5-L7).
+# Analytics views for the Genie Code "build-your-own dashboard" pages (L2-L4).
 # Plain governed gold VIEWs (not scheduled MVs) — they read from already-built
 # gold/silver, so the KPI logic (AR aging, forecast-vs-reorder, repositioning
 # savings) lives in a governed layer instead of ad-hoc dashboard prompts.
 # ---------------------------------------------------------------------------
 _ANALYTICS_VIEW_DEFS: dict[str, str] = {
-    # L5 — Financial Health & Receivables (CFO / AR view).
+    # L2 — Financial Health & Receivables (CFO / AR view).
     "v_financial_health": """
         SELECT
             i.invoice_id, i.invoice_no, i.customer_id,
@@ -196,7 +196,7 @@ _ANALYTICS_VIEW_DEFS: dict[str, str] = {
         FROM {s}.invoices i
         JOIN {s}.customers c ON i.customer_id = c.customer_id
     """,
-    # L6 — Inventory & Demand Planning (surfaces the ML forecast output).
+    # L3 — Inventory & Demand Planning (surfaces the ML forecast output).
     # Aggregate the per-day forecast to horizon-total demand per SKU, then join
     # the SKU master to compare against reorder point + value the exposure.
     "v_inventory_planning": """
@@ -225,7 +225,7 @@ _ANALYTICS_VIEW_DEFS: dict[str, str] = {
         FROM {s}.spare_parts sp
         JOIN fc ON sp.sku_id = fc.sku_id
     """,
-    # L7 — Empty-Container Repositioning (surfaces the optimization output).
+    # L4 — Empty-Container Repositioning (surfaces the optimization output).
     "v_repositioning_summary": """
         SELECT
             rp.from_port_id, rp.from_port, fp.region  AS from_region, fp.country AS from_country,
@@ -242,7 +242,7 @@ _ANALYTICS_VIEW_DEFS: dict[str, str] = {
 
 
 def create_analytics_views(spark: Any, catalog: str) -> list[str]:
-    """Create the L5-L7 analytics gold views; return created names.
+    """Create the L2-L4 analytics gold views; return created names.
 
     Best-effort per view: a missing upstream table (e.g. demand_forecasts before
     notebook 11 runs) skips that view with a warning rather than failing gold.

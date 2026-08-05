@@ -37,7 +37,7 @@ build`) and pre-deploy the app if possible.
 | 0:35–1:05 | **The dashboard** | Walk the 4 pages. **Wow moment:** the KPI counters are live and land in industry bands (reliability 60–85%, utilization 70–95%). |
 | 1:05–1:15 | ☕ Break | |
 | 1:15–1:55 | **Genie space** | Ask the sample questions; show a **verified benchmark** answer and the generated SQL. Then show the same in **Genie One** (business-user surface). **Talk track:** business definitions live in the space instructions. |
-| 1:55–2:45 | **Genie Code lab** | Participants build their own dashboard with the prompt ladder (`genie_code/prompts/`). Install the skill first (participant guide). Circulate; compare L4 executive pages. |
+| 1:55–2:45 | **Genie Code lab** | Participants build their own dashboard with the prompt ladder (`genie_code/prompts/`). Install the skill first (participant guide). Circulate; compare L1 executive pages and the L3/L4 pages that surface the ML forecast + optimization outputs. |
 | 2:45–3:00 | **AI Gateway 5-min talk track** | Why the gateway matters for PIL: governed frontier-model tokens, budgets, **per-user rate limits**, auditability, guardrails. **Live demo:** trip the 50-QPM rate limit by firing repeated `ai_query` calls and show the throttle + the usage on Page 4. |
 
 ---

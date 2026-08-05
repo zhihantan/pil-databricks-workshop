@@ -60,12 +60,13 @@ asset URLs. Most steps show `OK`.
 
 **Build with the prompt ladder** (`genie_code/prompts/dashboard_prompt_library.md`):
 1. Open a **new AI/BI dashboard** canvas and switch **Genie Code to Agent mode**.
-2. Paste **L1** (Fleet Overview). Check the ✅ expected outcome.
-3. Continue **L2** (Port Performance), **L3** (Commercial + global filters),
-   **L4** (open-ended executive page).
+2. Paste **L1** (open-ended executive fuel-efficiency page). Check the ✅ expected outcome.
+3. Continue **L2** (Financial Health & Receivables), **L3** (Inventory & Demand
+   Planning — surfaces the ML forecast), **L4** (Empty-Container Repositioning —
+   surfaces the optimization plan).
 
-✅ After L3 you have a multi-page dashboard with global filters and cross-filtering
-that you built by prompting.
+✅ After L4 you've built four new dashboard pages by prompting — including two that
+put the Phase-5 ML forecast and optimization outputs in front of executives.
 
 ---
 

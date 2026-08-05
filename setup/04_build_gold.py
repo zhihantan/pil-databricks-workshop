@@ -78,7 +78,7 @@ for name, status in metric_results:
 
 # COMMAND ----------
 
-# MAGIC %md ### Analytics views (Genie Code dashboard pages L5–L7)
+# MAGIC %md ### Analytics views (Genie Code dashboard pages L2–L4)
 # MAGIC Governed views backing the build-your-own-dashboard prompts. The finance
 # MAGIC view builds here (its source `silver.invoices` exists); the inventory and
 # MAGIC repositioning views depend on the ML outputs and are (re)created at the end
