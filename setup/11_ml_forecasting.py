@@ -524,6 +524,16 @@ fc_sdf.write.format("delta").mode("overwrite").option(
 ok(f"Wrote {len(future_rows):,} forecast rows → gold.demand_forecasts "
    f"(smooth={len(smooth_skus)} lightgbm, intermittent={len(inter_skus)} {inter_champion})")
 
+# Now that gold.demand_forecasts exists, (re)build the inventory-planning
+# analytics view that backs the Genie Code "Inventory & Demand Planning" page.
+try:
+    from pil_workshop import gold_build
+    made = gold_build.create_analytics_views(spark, CATALOG)
+    if "v_inventory_planning" in made:
+        ok("Built gold.v_inventory_planning (Inventory & Demand Planning page).")
+except Exception as exc:  # noqa: BLE001
+    warn(f"Could not build inventory analytics view: {exc}")
+
 # COMMAND ----------
 
 # MAGIC %md ### 6️⃣ Batch inference via `pyfunc` (load the registered champion back)

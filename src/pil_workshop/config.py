@@ -242,6 +242,12 @@ GOLD_USAGE_VIEWS: tuple[str, ...] = (
     "v_ai_usage_by_endpoint",
     "v_ai_usage_by_user",
 )
+# Analytics views backing the Genie Code build-your-own-dashboard pages (L5-L7).
+GOLD_ANALYTICS_VIEWS: tuple[str, ...] = (
+    "v_financial_health",
+    "v_inventory_planning",
+    "v_repositioning_summary",
+)
 
 
 @dataclass(frozen=True)

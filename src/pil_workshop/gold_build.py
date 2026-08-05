@@ -165,6 +165,102 @@ def create_materialized_views(spark: Any, catalog: str) -> list[tuple[str, str]]
 
 
 # ---------------------------------------------------------------------------
+# Analytics views for the Genie Code "build-your-own dashboard" pages (L5-L7).
+# Plain governed gold VIEWs (not scheduled MVs) — they read from already-built
+# gold/silver, so the KPI logic (AR aging, forecast-vs-reorder, repositioning
+# savings) lives in a governed layer instead of ad-hoc dashboard prompts.
+# ---------------------------------------------------------------------------
+_ANALYTICS_VIEW_DEFS: dict[str, str] = {
+    # L5 — Financial Health & Receivables (CFO / AR view).
+    "v_financial_health": """
+        SELECT
+            i.invoice_id, i.invoice_no, i.customer_id,
+            c.customer_name, c.customer_type, c.industry, c.credit_terms,
+            i.issue_date, i.due_date, i.paid_date, i.status, i.is_disputed,
+            i.total_usd,
+            -- days sales outstanding: paid → issue-to-paid, else issue-to-today
+            DATEDIFF(COALESCE(i.paid_date, CURRENT_DATE), i.issue_date)  AS dso_days,
+            -- overdue aging (open/overdue only), bucketed for an AR aging chart
+            CASE WHEN i.status IN ('Paid') THEN 0
+                 ELSE GREATEST(DATEDIFF(CURRENT_DATE, i.due_date), 0) END AS days_overdue,
+            CASE
+                WHEN i.status = 'Paid' THEN 'Paid'
+                WHEN DATEDIFF(CURRENT_DATE, i.due_date) <= 0 THEN 'Current'
+                WHEN DATEDIFF(CURRENT_DATE, i.due_date) <= 30 THEN '1-30 days'
+                WHEN DATEDIFF(CURRENT_DATE, i.due_date) <= 60 THEN '31-60 days'
+                WHEN DATEDIFF(CURRENT_DATE, i.due_date) <= 90 THEN '61-90 days'
+                ELSE '90+ days'
+            END                                                          AS aging_bucket,
+            -- cash at risk = unpaid balance (open/overdue/disputed)
+            CASE WHEN i.status <> 'Paid' THEN i.total_usd ELSE 0 END      AS outstanding_usd
+        FROM {s}.invoices i
+        JOIN {s}.customers c ON i.customer_id = c.customer_id
+    """,
+    # L6 — Inventory & Demand Planning (surfaces the ML forecast output).
+    # Aggregate the per-day forecast to horizon-total demand per SKU, then join
+    # the SKU master to compare against reorder point + value the exposure.
+    "v_inventory_planning": """
+        WITH fc AS (
+            SELECT sku_id, segment,
+                   ROUND(SUM(forecast_qty), 1)              AS forecast_horizon_qty,
+                   ROUND(AVG(forecast_qty), 3)              AS forecast_daily_qty,
+                   COUNT(*)                                 AS horizon_days
+            FROM {g}.demand_forecasts
+            GROUP BY sku_id, segment
+        )
+        SELECT
+            sp.sku_id, sp.sku_code, sp.category, sp.depot,
+            sp.demand_pattern, sp.unit_cost_usd, sp.lead_time_days, sp.reorder_point,
+            fc.segment, fc.forecast_horizon_qty, fc.forecast_daily_qty, fc.horizon_days,
+            -- projected demand over the reorder lead time
+            ROUND(fc.forecast_daily_qty * sp.lead_time_days, 1)          AS lead_time_demand,
+            -- stockout risk flag: lead-time demand exceeds the reorder point
+            CASE WHEN fc.forecast_daily_qty * sp.lead_time_days > sp.reorder_point
+                 THEN 'At risk' ELSE 'OK' END                            AS stockout_risk,
+            -- recommended reorder qty (cover horizon demand above reorder point)
+            GREATEST(ROUND(fc.forecast_horizon_qty - sp.reorder_point, 0), 0)
+                                                                         AS suggested_reorder_qty,
+            -- inventory value of the forecasted horizon demand
+            ROUND(fc.forecast_horizon_qty * sp.unit_cost_usd, 2)         AS forecast_value_usd
+        FROM {s}.spare_parts sp
+        JOIN fc ON sp.sku_id = fc.sku_id
+    """,
+    # L7 — Empty-Container Repositioning (surfaces the optimization output).
+    "v_repositioning_summary": """
+        SELECT
+            rp.from_port_id, rp.from_port, fp.region  AS from_region, fp.country AS from_country,
+            rp.to_port_id, rp.to_port, tp.region      AS to_region,   tp.country AS to_country,
+            rp.containers, rp.cost_usd,
+            ROUND(rp.cost_usd / NULLIF(rp.containers, 0), 1)            AS cost_per_container,
+            CASE WHEN fp.region = tp.region THEN 'Intra-region'
+                 ELSE 'Inter-region' END                               AS move_type
+        FROM {g}.repositioning_plan rp
+        LEFT JOIN {s}.ports fp ON rp.from_port_id = fp.port_id
+        LEFT JOIN {s}.ports tp ON rp.to_port_id = tp.port_id
+    """,
+}
+
+
+def create_analytics_views(spark: Any, catalog: str) -> list[str]:
+    """Create the L5-L7 analytics gold views; return created names.
+
+    Best-effort per view: a missing upstream table (e.g. demand_forecasts before
+    notebook 11 runs) skips that view with a warning rather than failing gold.
+    """
+    g, s = _g(catalog), _s(catalog)
+    created: list[str] = []
+    for name, body in _ANALYTICS_VIEW_DEFS.items():
+        target = f"{g}.{name}"
+        try:
+            spark.sql(f"CREATE OR REPLACE VIEW {target} AS {body.format(g=g, s=s)}")
+            created.append(name)
+            LOG.info("Analytics view %s created.", name)
+        except Exception as exc:  # noqa: BLE001
+            LOG.warning("Analytics view %s skipped (upstream not ready?): %s", name, exc)
+    return created
+
+
+# ---------------------------------------------------------------------------
 # Metric views from YAML
 # ---------------------------------------------------------------------------
 # Map YAML filename -> gold view name.

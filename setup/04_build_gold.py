@@ -78,6 +78,25 @@ for name, status in metric_results:
 
 # COMMAND ----------
 
+# MAGIC %md ### Analytics views (Genie Code dashboard pages L5–L7)
+# MAGIC Governed views backing the build-your-own-dashboard prompts. The finance
+# MAGIC view builds here (its source `silver.invoices` exists); the inventory and
+# MAGIC repositioning views depend on the ML outputs and are (re)created at the end
+# MAGIC of notebooks 11 and 12. Re-running this cell after 11/12 builds all three.
+
+# COMMAND ----------
+
+analytics_views = gold_build.create_analytics_views(spark, CATALOG)
+for name in analytics_views:
+    ok(f"analytics view: {name}")
+missing_av = [v for v in ("v_financial_health", "v_inventory_planning",
+                          "v_repositioning_summary") if v not in analytics_views]
+if missing_av:
+    warn(f"Deferred until ML notebooks run: {', '.join(missing_av)} "
+         "(they read gold.demand_forecasts / gold.repositioning_plan).")
+
+# COMMAND ----------
+
 # MAGIC %md ### KPI smoke tests
 # MAGIC Compute the headline KPIs and check each is in a plausible industry range.
 

@@ -243,6 +243,17 @@ if sup_nodes and def_nodes:
             mlflow.log_artifact(_csv, artifact_path="plan")
             mlflow.log_artifact(_png, artifact_path="plan")
             ok("Logged plan CSV + cost-comparison plot to the MLflow run.")
+
+            # gold.repositioning_plan now exists → (re)build the repositioning
+            # analytics view backing the Genie Code "Empty-Container
+            # Repositioning" dashboard page.
+            try:
+                from pil_workshop import gold_build
+                made = gold_build.create_analytics_views(spark, CATALOG)
+                if "v_repositioning_summary" in made:
+                    ok("Built gold.v_repositioning_summary (Repositioning page).")
+            except Exception as vexc:  # noqa: BLE001
+                warn(f"Could not build repositioning analytics view: {vexc}")
 else:
     ok("Network already balanced — no repositioning needed (rare with this data).")
 

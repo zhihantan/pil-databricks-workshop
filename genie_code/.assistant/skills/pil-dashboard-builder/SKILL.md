@@ -42,6 +42,18 @@ Metric views (use for ratio KPIs so definitions stay consistent — query with
   `@metric_vessel_utilization`, `@metric_port_dwell_turnaround`,
   `@metric_revenue`, `@metric_sustainability`, `@metric_working_capital`.
 
+Analytics views for the newer pages (finance, inventory planning, repositioning):
+- `@v_financial_health` — invoice-level receivables: `dso_days`, `days_overdue`,
+  `aging_bucket` (Current / 1-30 / 31-60 / 61-90 / 90+ days / Paid),
+  `outstanding_usd`, `is_disputed`, `status`, `customer_name`, `credit_terms`.
+- `@v_inventory_planning` — spare-parts demand forecast joined to reorder logic:
+  `forecast_horizon_qty`, `forecast_daily_qty`, `lead_time_demand`,
+  `reorder_point`, `stockout_risk` (At risk / OK), `suggested_reorder_qty`,
+  `forecast_value_usd`, `category`, `depot`, `segment`.
+- `@v_repositioning_summary` — empty-container OR-Tools plan: `from_port`/
+  `to_port` (+ `from_region`/`to_region`), `containers`, `cost_usd`,
+  `cost_per_container`, `move_type` (Intra-region / Inter-region).
+
 Revenue/sustainability detail base views: `_rev_base`, `_sustainability_base`.
 
 ## KPI definitions (get these exactly right)
@@ -56,6 +68,14 @@ Revenue/sustainability detail base views: `_rev_base`, `_sustainability_base`.
 - **Fuel Efficiency** = mt fuel / 1,000 TEU-nm (lower is better).
 - **CO₂ per TEU-km** — VLSFO factor ≈ 3.114 t CO₂ / t fuel.
 - **DSO (days)** = avg issue→paid days over paid invoices.
+- **Cash at risk** = Σ `outstanding_usd` (unpaid: open/overdue/disputed). Show AR
+  by `aging_bucket`; flag the **90+ days** bucket (coral).
+- **Dispute rate** = % of invoices with `is_disputed = true`.
+- **Stockout risk** = a SKU is *At risk* when forecast lead-time demand
+  (`lead_time_demand`) exceeds its `reorder_point`. **Suggested reorder qty** =
+  horizon demand above the reorder point.
+- **Repositioning cost** = Σ `cost_usd` of the min-cost-flow plan; split by
+  `move_type` (inter-region dominates). Lower total = better optimization.
 
 ## Chart-type guidance per KPI
 
