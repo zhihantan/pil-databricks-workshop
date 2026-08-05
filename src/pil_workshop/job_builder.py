@@ -85,6 +85,7 @@ def build_job_settings(
     catalog: str,
     scale: str,
     warehouse_id: str | None = None,
+    managed_location: str | None = None,
     timezone: str = DEFAULT_TIMEZONE,
     cron: str = DEFAULT_CRON,
     paused: bool = False,
@@ -93,6 +94,10 @@ def build_job_settings(
 
     ``notebook_root`` is the workspace folder holding the setup notebooks
     (e.g. ``/Workspace/Users/me/pil-databricks-workshop/setup``).
+
+    ``managed_location`` (optional) is passed to the catalog task only; set it
+    for Azure "Default Storage" metastores that have no storage root, where a
+    plain ``CREATE CATALOG`` fails and a ``MANAGED LOCATION`` is required.
     """
     from databricks.sdk.service import compute as c
     from databricks.sdk.service import jobs as j
@@ -104,6 +109,9 @@ def build_job_settings(
     tasks: list[Any] = []
     for step in STEPS:
         params = dict(base_params) if step.passes_scale else {"catalog": catalog}
+        # Only the catalog-creation task understands managed_location.
+        if managed_location and step.key == "01_catalog":
+            params["managed_location"] = managed_location
         task = j.Task(
             task_key=step.key,
             description=f"PIL setup: {step.notebook}",
@@ -162,6 +170,7 @@ def create_or_update_job(
     catalog: str,
     scale: str,
     warehouse_id: str | None = None,
+    managed_location: str | None = None,
     timezone: str = DEFAULT_TIMEZONE,
     cron: str = DEFAULT_CRON,
     paused: bool = False,
@@ -169,6 +178,7 @@ def create_or_update_job(
     """Create the setup Job (or reset an existing one by name); return job_id."""
     settings = build_job_settings(
         notebook_root, catalog=catalog, scale=scale, warehouse_id=warehouse_id,
+        managed_location=managed_location,
         timezone=timezone, cron=cron, paused=paused,
     )
     existing = find_job_id(client, settings.name)

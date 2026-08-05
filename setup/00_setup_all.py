@@ -61,6 +61,10 @@ dbutils.widgets.text("schedule_cron", job_builder.DEFAULT_CRON, "Daily schedule 
 dbutils.widgets.text("timezone", job_builder.DEFAULT_TIMEZONE, "Schedule timezone")
 dbutils.widgets.text("skip_steps", "", "Skip steps (inline mode, e.g. 11,12)")
 dbutils.widgets.dropdown("continue_on_error", "false", ["true", "false"], "Continue on error (inline)")
+# Optional: only needed on Azure "Default Storage" metastores that have no
+# storage root, where a plain CREATE CATALOG fails. Set to an external-location
+# path you have a storage credential for; passed to notebook 01 only.
+dbutils.widgets.text("managed_location", "", "Catalog MANAGED LOCATION (optional, Default-Storage metastores)")
 
 CATALOG = safe_identifier(dbutils.widgets.get("catalog") or config.DEFAULT_CATALOG)
 SCALE = dbutils.widgets.get("scale") or config.DEFAULT_SCALE
@@ -70,6 +74,7 @@ CRON = dbutils.widgets.get("schedule_cron") or job_builder.DEFAULT_CRON
 TZ = dbutils.widgets.get("timezone") or job_builder.DEFAULT_TIMEZONE
 SKIP = {s.strip() for s in dbutils.widgets.get("skip_steps").split(",") if s.strip()}
 CONTINUE = dbutils.widgets.get("continue_on_error") == "true"
+MANAGED_LOCATION = (dbutils.widgets.get("managed_location") or "").strip()
 
 wc = WorkspaceClient()
 banner("PIL Data + AI Workshop — One-Click Setup")
@@ -154,7 +159,8 @@ if MODE == "job":
 
     job_id = job_builder.create_or_update_job(
         wc, setup_dir, catalog=CATALOG, scale=SCALE,
-        warehouse_id=WAREHOUSE_ID, timezone=TZ, cron=CRON, paused=False,
+        warehouse_id=WAREHOUSE_ID, managed_location=MANAGED_LOCATION or None,
+        timezone=TZ, cron=CRON, paused=False,
     )
     url = job_builder.job_url(_host(), job_id)
     ok(f"Job ready: {url}")
@@ -201,6 +207,10 @@ STEPS = [
 ]
 
 BASE_ARGS = {"catalog": CATALOG, "scale": SCALE}
+if MANAGED_LOCATION:
+    # Only notebook 01 reads managed_location; harmless to pass to all in inline
+    # mode since the others ignore unknown args.
+    BASE_ARGS["managed_location"] = MANAGED_LOCATION
 results = []
 for prefix, notebook, timeout in STEPS:
     if prefix in SKIP:

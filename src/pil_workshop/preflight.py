@@ -36,10 +36,22 @@ def check_catalog_privilege(spark: Any, catalog: str) -> CheckResult:
         return CheckResult("Catalog create privilege", "PASS",
                            f"Created/verified '{catalog}'.")
     except Exception as exc:  # noqa: BLE001
+        msg = str(exc)
+        m = msg.lower()
+        # Azure "Default Storage" metastore with no storage root — a plain
+        # CREATE CATALOG can't allocate managed storage. NOT a privilege issue.
+        if ("storage root url does not exist" in m
+                or "default storage is enabled" in m
+                or "provide a storage location" in m):
+            return CheckResult(
+                "Catalog create (Default Storage)", "WARN",
+                "Metastore has no storage root. Pre-create the catalog in the UI "
+                "(Default Storage) OR set the 'managed_location' widget, then "
+                f"re-run. Not a privilege issue. {msg[:70]}")
         return CheckResult(
             "Catalog create privilege", "FAIL",
             "Need CREATE CATALOG on the metastore (or a pre-created catalog with "
-            f"ALL PRIVILEGES). {str(exc)[:80]}")
+            f"ALL PRIVILEGES). {msg[:80]}")
 
 
 def check_serverless_warehouse(client: Any) -> CheckResult:

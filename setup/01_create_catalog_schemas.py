@@ -62,9 +62,17 @@ from pil_workshop.utils import banner, ok, safe_identifier, warn
 # Widgets — the ONE place a user overrides catalog / scale.
 dbutils.widgets.text("catalog", config.DEFAULT_CATALOG, "Catalog name")
 dbutils.widgets.dropdown("scale", config.DEFAULT_SCALE, ["demo", "full"], "Data scale")
+# Optional managed storage location for the catalog. Leave BLANK on workspaces
+# whose metastore has a storage root (the common case). Set it only if catalog
+# creation fails with "Metastore storage root URL does not exist" / Default
+# Storage — e.g. an external-location path like
+# 'abfss://<container>@<account>.dfs.core.windows.net/<path>' that you have a
+# storage credential for. See the error guidance below.
+dbutils.widgets.text("managed_location", "", "Catalog MANAGED LOCATION (optional)")
 
 CATALOG = safe_identifier(dbutils.widgets.get("catalog") or config.DEFAULT_CATALOG)
 SCALE = dbutils.widgets.get("scale") or config.DEFAULT_SCALE
+MANAGED_LOCATION = (dbutils.widgets.get("managed_location") or "").strip()
 
 banner(f"01 · Provisioning catalog '{CATALOG}' (scale={SCALE})")
 
@@ -72,25 +80,134 @@ banner(f"01 · Provisioning catalog '{CATALOG}' (scale={SCALE})")
 
 # MAGIC %md ### Create the catalog
 # MAGIC Requires the `CREATE CATALOG` privilege on the metastore (or `MANAGE` from a
-# MAGIC metastore admin). If this fails, ask an account/metastore admin to grant it —
-# MAGIC the error below says exactly what is missing.
+# MAGIC metastore admin).
+# MAGIC
+# MAGIC **Azure "Default Storage" workspaces:** some Azure metastores have **no
+# MAGIC storage root**, so a plain `CREATE CATALOG` fails with *"Metastore storage
+# MAGIC root URL does not exist"*. This is **not** a privilege problem. Fix it with
+# MAGIC **either** of:
+# MAGIC 1. **Pre-create the catalog in the UI** using Default Storage (Catalog
+# MAGIC    Explorer → Create catalog), then re-run — this notebook detects the
+# MAGIC    existing catalog and continues; **or**
+# MAGIC 2. Set the **`managed_location`** widget to an external-location path you
+# MAGIC    have a storage credential for (e.g.
+# MAGIC    `abfss://<container>@<account>.dfs.core.windows.net/<path>`) and re-run —
+# MAGIC    the notebook then creates the catalog `WITH MANAGED LOCATION`.
 
 # COMMAND ----------
 
-try:
-    spark.sql(f"CREATE CATALOG IF NOT EXISTS `{CATALOG}`")
-    spark.sql(
-        f"COMMENT ON CATALOG `{CATALOG}` IS "
-        f"'PIL Data + AI Workshop — synthetic container-liner data & AI assets.'"
+
+def _catalog_exists(name: str) -> bool:
+    try:
+        return any(
+            r[0] == name for r in spark.sql("SHOW CATALOGS").collect()
+        )
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _needs_storage_location(msg: str) -> bool:
+    """True when the failure is the Azure Default-Storage / no-storage-root case
+    (fixable with a MANAGED LOCATION), not a privilege problem."""
+    m = msg.lower()
+    return (
+        "storage root url does not exist" in m
+        or "default storage is enabled" in m
+        or "provide a storage location" in m
+        or "managed location" in m
     )
-    ok(f"Catalog `{CATALOG}` ready")
-except Exception as exc:  # noqa: BLE001
-    raise RuntimeError(
-        f"Could not create catalog '{CATALOG}'. You need the CREATE CATALOG "
-        f"privilege on the metastore (Account Console → Catalog → Permissions), "
-        f"or ask a metastore admin to pre-create it and grant you ALL PRIVILEGES.\n"
-        f"Underlying error: {exc}"
-    ) from exc
+
+
+def _is_privilege_error(msg: str) -> bool:
+    m = msg.lower()
+    return (
+        "permission" in m
+        or "privilege" in m
+        or "does not have" in m
+        or "not authorized" in m
+        or "access denied" in m
+    )
+
+
+def _comment_catalog() -> None:
+    try:
+        spark.sql(
+            f"COMMENT ON CATALOG `{CATALOG}` IS "
+            f"'PIL Data + AI Workshop — synthetic container-liner data & AI assets.'"
+        )
+    except Exception as cexc:  # noqa: BLE001 - comment is cosmetic; never fatal
+        warn(f"Could not set catalog comment (non-fatal): {cexc}")
+
+
+def _provision_catalog() -> None:
+    # 0) Already there (e.g. pre-created in the UI with Default Storage)? Done.
+    if _catalog_exists(CATALOG):
+        ok(f"Catalog `{CATALOG}` already exists — using it.")
+        _comment_catalog()
+        return
+
+    # 1) If a managed location was supplied, use it directly (Default-Storage
+    #    workspaces need this; harmless elsewhere if you have the credential).
+    if MANAGED_LOCATION:
+        try:
+            spark.sql(
+                f"CREATE CATALOG IF NOT EXISTS `{CATALOG}` "
+                f"MANAGED LOCATION '{MANAGED_LOCATION}'"
+            )
+            ok(f"Catalog `{CATALOG}` ready (MANAGED LOCATION supplied).")
+            _comment_catalog()
+            return
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(
+                f"Could not create catalog '{CATALOG}' with MANAGED LOCATION "
+                f"'{MANAGED_LOCATION}'. Verify the path is a valid external "
+                f"location you have a storage credential + CREATE MANAGED STORAGE "
+                f"on.\nUnderlying error: {exc}"
+            ) from exc
+
+    # 2) Default path: plain create (works when the metastore has a storage root).
+    try:
+        spark.sql(f"CREATE CATALOG IF NOT EXISTS `{CATALOG}`")
+        ok(f"Catalog `{CATALOG}` ready")
+        _comment_catalog()
+        return
+    except Exception as exc:  # noqa: BLE001
+        msg = str(exc)
+        # Race / eventual-consistency: it may have been created concurrently.
+        if _catalog_exists(CATALOG):
+            ok(f"Catalog `{CATALOG}` now present — continuing.")
+            _comment_catalog()
+            return
+        if _needs_storage_location(msg):
+            raise RuntimeError(
+                f"Could not create catalog '{CATALOG}': this Azure workspace's "
+                f"metastore has no storage root (Default Storage). This is NOT a "
+                f"privilege problem. Do ONE of the following, then re-run this "
+                f"notebook (it will detect the catalog and continue):\n"
+                f"  (A) Create the catalog once in the UI using Default Storage: "
+                f"Catalog Explorer → Create catalog → name it '{CATALOG}'; or\n"
+                f"  (B) Re-run with the 'managed_location' widget set to an "
+                f"external-location path you have a storage credential for, e.g. "
+                f"abfss://<container>@<account>.dfs.core.windows.net/{CATALOG} — "
+                f"the notebook will then CREATE CATALOG ... WITH MANAGED LOCATION.\n"
+                f"Underlying error: {msg}"
+            ) from exc
+        if _is_privilege_error(msg):
+            raise RuntimeError(
+                f"Could not create catalog '{CATALOG}'. You need the CREATE "
+                f"CATALOG privilege on the metastore (Account Console → Catalog → "
+                f"Permissions), or ask a metastore admin to pre-create it and "
+                f"grant you ALL PRIVILEGES.\nUnderlying error: {msg}"
+            ) from exc
+        raise RuntimeError(
+            f"Could not create catalog '{CATALOG}'. If your Azure account uses "
+            f"Default Storage, either pre-create '{CATALOG}' in the UI or set the "
+            f"'managed_location' widget (see this cell's notes). Otherwise verify "
+            f"you have CREATE CATALOG on the metastore.\nUnderlying error: {msg}"
+        ) from exc
+
+
+_provision_catalog()
 
 # COMMAND ----------
 
