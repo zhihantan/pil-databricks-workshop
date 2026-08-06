@@ -43,6 +43,136 @@ def test_invoice_queue_seeds_from_uc():
     assert items[0].exception_type == "total_mismatch"
 
 
+def test_invoice_queue_falls_back_to_ground_truth_when_exceptions_missing():
+    """Regression (the real-workspace case): when gold.invoice_exceptions doesn't
+    exist (08 extraction never ran/failed), seed from silver.invoice_pdf_ground_truth
+    — whose file_name→customer is correct-by-construction — NOT the static sample.
+    """
+
+    def _routed_sql(sql):
+        if "invoice_exceptions" in sql:
+            raise RuntimeError("TABLE_OR_VIEW_NOT_FOUND: gold.invoice_exceptions")
+        if "invoice_pdf_ground_truth" in sql:
+            assert "gt_anomaly IS NOT NULL" in sql  # flagged-only
+            return [
+                {"file_name": "invoice_0058.pdf", "invoice_no": "INV-2026-100058",
+                 "customer": "Kirin Foods Trading", "extracted_total": 2490.4,
+                 "ground_truth_total": 2490.4, "exception_type": "total_mismatch"},
+            ]
+        return []
+
+    svc = InvoiceService(conn_factory=None, sql_fn=_routed_sql)
+    items = svc.list_queue()
+    assert len(items) == 1
+    assert items[0].file_name == "invoice_0058.pdf"
+    assert items[0].customer == "Kirin Foods Trading"  # matches the real PDF
+    assert items[0].exception_type == "total_mismatch"
+
+
+def test_invoice_queue_static_sample_only_when_no_uc_tables():
+    """When BOTH UC sources are unreachable, fall back to the static sample."""
+
+    def _all_missing(sql):
+        raise RuntimeError("TABLE_OR_VIEW_NOT_FOUND")
+
+    svc = InvoiceService(conn_factory=None, sql_fn=_all_missing)
+    items = svc.list_queue()
+    # static sample is non-empty and every row points at a real PDF path
+    assert len(items) >= 1
+    assert all(i.pdf_preview_url.startswith("/api/invoices/") for i in items)
+
+
+class _FakeCursor:
+    """Minimal DB-API cursor over a fixed list of queue rows (dicts)."""
+
+    _COLS = ("id", "file_name", "invoice_no", "customer", "po_number", "currency",
+             "extracted_total", "ground_truth_total", "exception_type", "status")
+
+    def __init__(self, store):
+        self._store = store
+        self._result: list[tuple] = []
+        self._scalar = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, sql, params=None):
+        if "LIMIT 1" in sql:  # the _table_is_empty probe
+            self._scalar = True
+            self._result = [(1,)] if self._store else []
+            return
+        self._scalar = False
+        rows = self._store
+        if params:  # status filter
+            rows = [r for r in rows if r.get("status") == params[0]]
+        self._result = [tuple(r.get(c) for c in self._COLS) for r in rows]
+
+    @property
+    def description(self):
+        return [(c,) for c in self._COLS]
+
+    def fetchall(self):
+        return self._result
+
+    def fetchone(self):
+        return self._result[0] if self._result else None
+
+
+class _FakeConn:
+    def __init__(self, store):
+        self._store = store
+
+    def cursor(self):
+        return _FakeCursor(self._store)
+
+    def close(self):
+        pass
+
+
+def test_lakebase_unseeded_queue_seeds_demo_view_from_uc():
+    """Regression: a provisioned-but-EMPTY Lakebase queue (09 couldn't seed it)
+    must show the real flagged invoices from UC, not a blank screen."""
+    gt_rows = [
+        {"file_name": "invoice_0058.pdf", "invoice_no": "INV-2026-100058",
+         "customer": "Kirin Foods Trading", "extracted_total": 2490.4,
+         "ground_truth_total": 2490.4, "exception_type": "total_mismatch"},
+    ]
+
+    def _routed_sql(sql):
+        if "invoice_exceptions" in sql:
+            raise RuntimeError("TABLE_OR_VIEW_NOT_FOUND")
+        if "invoice_pdf_ground_truth" in sql:
+            return gt_rows
+        return []
+
+    svc = InvoiceService(conn_factory=lambda: _FakeConn([]), sql_fn=_routed_sql)
+    items = svc.list_queue()
+    assert [i.file_name for i in items] == ["invoice_0058.pdf"]
+    assert items[0].customer == "Kirin Foods Trading"
+
+
+def test_lakebase_all_decided_stays_empty_not_reseeded():
+    """Regression (protects bug #1 on the Lakebase path): once the queue has been
+    seeded and all rows decided, a pending query returns EMPTY — it must NOT
+    re-seed the demo view (which would resurrect decided invoices)."""
+    seeded = [
+        {"id": 1, "file_name": "a.pdf", "invoice_no": "INV-1", "customer": "X",
+         "po_number": None, "currency": "USD", "extracted_total": 1.0,
+         "ground_truth_total": 1.0, "exception_type": "missing_po", "status": "approved"},
+    ]
+
+    def _sql_should_not_be_used(sql):
+        raise AssertionError("must not fall back to UC when table is non-empty")
+
+    svc = InvoiceService(conn_factory=lambda: _FakeConn(seeded),
+                        sql_fn=_sql_should_not_be_used)
+    # No pending rows, but the table is non-empty → stays empty, no re-seed.
+    assert svc.list_queue(status="pending") == []
+
+
 def test_invoice_status_filter_and_decision_updates_memory():
     rows = [
         {"file_name": "a.pdf", "invoice_no": "1", "customer": "X",

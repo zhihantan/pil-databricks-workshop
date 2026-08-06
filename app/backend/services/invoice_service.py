@@ -57,7 +57,18 @@ class InvoiceService:
                     cur.execute(
                         f"SELECT {cols_sql} FROM pil_app.invoice_review_queue ORDER BY id")
                 cols = [c[0] for c in cur.description]
-                return [dict(zip(cols, row, strict=False)) for row in cur.fetchall()]
+                rows = [dict(zip(cols, row, strict=False)) for row in cur.fetchall()]
+                # A completely UNSEEDED Lakebase queue (0 rows total — e.g. 09
+                # couldn't read gold.invoice_exceptions) should still show the
+                # real flagged invoices, not a blank screen. Distinguish "never
+                # seeded" from "seeded but all decided" by checking the total
+                # count (ignoring the status filter): only seed the demo view
+                # when the table is genuinely empty, so decisions still clear
+                # the queue once real rows exist.
+                if not rows and self._table_is_empty(cur):
+                    LOG.info("Lakebase queue unseeded — seeding demo view from UC.")
+                    return self._list_from_memory(status)
+            return rows
         except Exception as exc:  # noqa: BLE001
             LOG.warning("Lakebase queue read failed, using memory: %s", exc)
             return self._list_from_memory(status)
@@ -67,8 +78,29 @@ class InvoiceService:
             except Exception:  # noqa: BLE001
                 pass
 
+    @staticmethod
+    def _table_is_empty(cur: Any) -> bool:
+        """True if the review queue has NO rows at all (never seeded), as opposed
+        to being empty only for the current status filter (all decided)."""
+        try:
+            cur.execute("SELECT 1 FROM pil_app.invoice_review_queue LIMIT 1")
+            return cur.fetchone() is None
+        except Exception:  # noqa: BLE001
+            return False
+
     def _ensure_demo_seeded(self) -> None:
-        """Seed the process-level demo store once (from UC, else static sample).
+        """Seed the process-level demo store once, preferring REAL data so the
+        queue's fields always match the PDF each row previews.
+
+        Source priority (each row's ``file_name`` must correspond to a real PDF
+        in the Volume, so its customer/invoice_no agree with the rendered doc):
+          1. ``gold.invoice_exceptions`` — the flagged-invoice table (best: it
+             already carries the derived exception_type + ground-truth total).
+          2. ``silver.invoice_pdf_ground_truth`` — per-file truth written by
+             notebook 07; used when 08's extraction/reconciliation hasn't run
+             (or failed), so the queue still matches the actual documents.
+          3. ``_SAMPLE_QUEUE`` — a tiny static last resort (values kept in sync
+             with the seed=42 generator) only when no UC tables are reachable.
 
         Using the shared demo_store (not per-instance state) means a decision
         made in one request is visible in the next — services are constructed
@@ -76,18 +108,40 @@ class InvoiceService:
         """
         if demo_store.is_seeded():
             return
-        settings = get_settings()
-        rows: list[dict[str, Any]] = []
-        if self._sql_fn:
-            try:
-                uc = self._sql_fn(
-                    f"SELECT file_name, invoice_no, customer, total AS extracted_total, "
-                    f"gt_total AS ground_truth_total, exception_type "
-                    f"FROM {settings.gold}.invoice_exceptions LIMIT 200")
-                rows = list(uc)
-            except Exception as exc:  # noqa: BLE001
-                LOG.warning("UC seed failed: %s", exc)
+        rows = self._seed_rows_from_uc() if self._sql_fn else []
         demo_store.seed_queue(rows or _SAMPLE_QUEUE)
+
+    def _seed_rows_from_uc(self) -> list[dict[str, Any]]:
+        """Read demo-queue rows from UC (exceptions table, else ground truth).
+
+        Returns [] if neither table is reachable so the caller falls back to the
+        static sample. Both queries are best-effort and never raise.
+        """
+        settings = get_settings()
+        # 1. The flagged-exceptions table (already scoped to problem invoices).
+        try:
+            rows = list(self._sql_fn(
+                f"SELECT file_name, invoice_no, customer, total AS extracted_total, "
+                f"gt_total AS ground_truth_total, exception_type "
+                f"FROM {settings.gold}.invoice_exceptions LIMIT 200"))
+            if rows:
+                return rows
+        except Exception as exc:  # noqa: BLE001
+            LOG.warning("UC seed from gold.invoice_exceptions failed: %s", exc)
+        # 2. Per-file ground truth (matches the PDFs by construction). Keep only
+        #    the flagged ones so the "review queue" stays a queue of exceptions.
+        try:
+            rows = list(self._sql_fn(
+                f"SELECT file_name, invoice_no, customer, "
+                f"total AS extracted_total, total AS ground_truth_total, "
+                f"gt_anomaly AS exception_type "
+                f"FROM {settings.silver}.invoice_pdf_ground_truth "
+                f"WHERE gt_anomaly IS NOT NULL LIMIT 200"))
+            if rows:
+                return rows
+        except Exception as exc:  # noqa: BLE001
+            LOG.warning("UC seed from silver.invoice_pdf_ground_truth failed: %s", exc)
+        return []
 
     def _list_from_memory(self, status: str | None) -> list[dict[str, Any]]:
         self._ensure_demo_seeded()
