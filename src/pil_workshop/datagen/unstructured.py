@@ -18,6 +18,14 @@ from typing import Any
 # ---------------------------------------------------------------------------
 # Invoice PDFs
 # ---------------------------------------------------------------------------
+# An invoice is an IMMUTABLE historical document — its number and issue date are
+# assigned once and never change. So invoice generation is anchored to a FIXED
+# reference date, NOT date.today(). This keeps every run byte-for-byte stable:
+# file ``invoice_{i}.pdf`` always renders the same invoice_no / issue_date /
+# totals. (The structured medallion data still anchors to "today" for dashboard
+# freshness — see config.history_window — but documents must not drift, or a
+# once-seeded review queue falls out of sync with the regenerated PDFs.)
+_INVOICE_ANCHOR = date(2026, 6, 30)
 _TEMPLATES = ["classic", "modern", "compact", "banded"]
 _CURRENCIES = ["USD", "SGD", "EUR", "CNY"]
 _CHARGES = [
@@ -60,7 +68,9 @@ def generate_invoice_pdfs(
     for i in range(n):
         template = _TEMPLATES[i % len(_TEMPLATES)]
         currency = rng.choice(_CURRENCIES)
-        issue = date.today() - timedelta(days=rng.randint(10, 700))
+        # Anchored to a FIXED reference (not date.today()) so the invoice_no
+        # (which embeds issue.year) and the document are stable across runs.
+        issue = _INVOICE_ANCHOR - timedelta(days=rng.randint(10, 700))
         customer = rng.choice(_CUSTOMER_NAMES)
         n_lines = rng.randint(2, 5)
         picks = rng.sample(_CHARGES, n_lines)

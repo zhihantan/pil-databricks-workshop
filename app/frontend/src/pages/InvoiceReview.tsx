@@ -18,7 +18,13 @@ export function InvoiceReview() {
   // Reviewer corrections for the active invoice, keyed by field name.
   const [corr, setCorr] = useState<Record<string, string>>({});
 
-  const queue = useQuery({ queryKey: ["invoices"], queryFn: () => api.listInvoices() });
+  // Only PENDING invoices belong in the review queue — an approve/reject sets
+  // the row's status server-side, so fetching pending-only makes a decided
+  // invoice drop out of the queue (and off this screen) on the next refetch.
+  const queue = useQuery({
+    queryKey: ["invoices", "pending"],
+    queryFn: () => api.listInvoices("pending"),
+  });
 
   const decide = useMutation({
     mutationFn: ({
@@ -82,8 +88,8 @@ export function InvoiceReview() {
         <Skeleton height={400} />
       ) : items.length === 0 ? (
         <EmptyState
-          emoji="🧾"
-          text="No invoices in the review queue. Run notebooks 07–09."
+          emoji="✅"
+          text="No invoices pending review — the queue is clear. Newly flagged invoices from the extraction pipeline (notebooks 07–09) will appear here."
         />
       ) : (
         <div className="split">

@@ -211,17 +211,29 @@ class InvoiceService:
         return "memory"
 
 
-# A tiny static sample so the queue is never empty in a fresh demo.
+# A tiny static sample so the queue is never empty in a fresh demo (before UC /
+# Lakebase are populated). These MUST correspond to the actual PDFs the same
+# rows preview — otherwise the extracted-fields panel and the rendered document
+# disagree. The values below are the real, deterministic output of the seed=42
+# invoice generator (pil_workshop.datagen.unstructured.generate_invoice_pdfs,
+# anchored to a fixed date so they never drift) for three flagged invoices, one
+# per exception type. Regenerate with that function if the generator changes.
 _SAMPLE_QUEUE: list[dict[str, Any]] = [
-    {"file_name": "invoice_0007.pdf", "invoice_no": "INV-2025-100007",
-     "customer": "Meridian Electronics Pte Ltd", "extracted_total": 5231.0,
-     "ground_truth_total": 4180.0, "exception_type": "total_mismatch"},
-    {"file_name": "invoice_0013.pdf", "invoice_no": "INV-2025-100013",
-     "customer": "Auburn Auto Parts Co.", "extracted_total": 2650.0,
-     "ground_truth_total": 2650.0, "exception_type": "missing_po"},
-    {"file_name": "invoice_0021.pdf", "invoice_no": "INV-2025-100007",
-     "customer": "Zenith Machinery Ltd", "extracted_total": 3990.0,
-     "ground_truth_total": 3990.0, "exception_type": "duplicate_no"},
+    # total_mismatch — total inflated vs subtotal+tax (invoice_0058.pdf).
+    {"file_name": "invoice_0058.pdf", "invoice_no": "INV-2026-100058",
+     "customer": "Kirin Foods Trading", "po_number": "PO200058", "currency": "CNY",
+     "extracted_total": 2490.40, "ground_truth_total": 2490.40,
+     "exception_type": "total_mismatch"},
+    # missing_po — no PO number on the document (invoice_0001.pdf).
+    {"file_name": "invoice_0001.pdf", "invoice_no": "INV-2024-100001",
+     "customer": "Kirin Foods Trading", "po_number": None, "currency": "USD",
+     "extracted_total": 7887.81, "ground_truth_total": 7887.81,
+     "exception_type": "missing_po"},
+    # duplicate_no — invoice_no reused from an earlier invoice (invoice_0015.pdf).
+    {"file_name": "invoice_0015.pdf", "invoice_no": "INV-2026-100002",
+     "customer": "Harbor Furniture Works", "po_number": "PO200015", "currency": "USD",
+     "extracted_total": 9900.27, "ground_truth_total": 9900.27,
+     "exception_type": "duplicate_no"},
 ]
 
 

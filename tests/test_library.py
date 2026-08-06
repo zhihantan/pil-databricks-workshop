@@ -96,6 +96,47 @@ def test_invoices_have_expected_anomaly_share():
     assert 0.04 <= len(anomalies) / len(invs) <= 0.16
 
 
+def test_invoice_pdf_numbers_are_stable_across_runs():
+    """Regression (bug #2b): invoice_no / issue_date must NOT drift with the wall
+    clock. Notebook 07 regenerates the PDFs on every 12-hourly run, but the
+    review queue is seeded once — if invoice_no changed run-to-run (it used to
+    embed date.today().year) the queue would point at stale documents.
+
+    We patch date.today() to two very different dates and assert the generated
+    ground truth is byte-identical (numbers, issue dates, totals all fixed).
+    """
+    import datetime as _dt
+    import tempfile
+
+    from pil_workshop.datagen import unstructured
+
+    reportlab = pytest.importorskip("reportlab")  # noqa: F841 — PDF rendering dep
+
+    class _FrozenDate(_dt.date):
+        _frozen = _dt.date(2030, 1, 1)
+
+        @classmethod
+        def today(cls):
+            return cls._frozen
+
+    orig = unstructured.date
+    try:
+        # Run once as if "today" were 2030, once as 2020 — must be identical.
+        _FrozenDate._frozen = _dt.date(2030, 1, 1)
+        unstructured.date = _FrozenDate
+        gt_2030 = unstructured.generate_invoice_pdfs(tempfile.mkdtemp(), n=25, seed=42)
+        _FrozenDate._frozen = _dt.date(2020, 1, 1)
+        gt_2020 = unstructured.generate_invoice_pdfs(tempfile.mkdtemp(), n=25, seed=42)
+    finally:
+        unstructured.date = orig
+
+    key = lambda g: (g["invoice_no"], g["issue_date"], g["total"], g["gt_anomaly"])
+    assert [key(g) for g in gt_2030] == [key(g) for g in gt_2020]
+    # And the year embedded in invoice_no reflects the FIXED anchor, not 2030/2020.
+    years = {g["invoice_no"].split("-")[1] for g in gt_2030}
+    assert years and years.isdisjoint({"2030", "2020"})
+
+
 # --- forecasting metrics --------------------------------------------------
 def test_wape_and_mase_basic():
     actual = np.array([10.0, 12.0, 11.0])

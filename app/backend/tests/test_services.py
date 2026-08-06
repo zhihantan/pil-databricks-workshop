@@ -164,6 +164,68 @@ def test_enqueue_for_review_upserts_in_lakebase():
     assert ("COMMIT", None) in captured
 
 
+def test_decided_invoice_leaves_pending_queue():
+    """Regression (bug #1): a decided invoice must drop out of the pending queue.
+
+    The review screen fetches ``status='pending'``; approving/rejecting sets the
+    row's status server-side, so it must no longer appear in the pending list.
+    """
+    rows = [
+        {"file_name": "invoice_0058.pdf", "invoice_no": "INV-2026-100058",
+         "customer": "Kirin Foods Trading", "extracted_total": 2490.4,
+         "ground_truth_total": 2490.4, "exception_type": "total_mismatch"},
+        {"file_name": "invoice_0001.pdf", "invoice_no": "INV-2024-100001",
+         "customer": "Kirin Foods Trading", "extracted_total": 7887.81,
+         "ground_truth_total": 7887.81, "exception_type": "missing_po"},
+    ]
+    InvoiceService(sql_fn=_fake_sql(rows)).list_queue()  # seed
+    before = InvoiceService(sql_fn=_fake_sql(rows)).list_queue(status="pending")
+    assert {i.file_name for i in before} == {"invoice_0058.pdf", "invoice_0001.pdf"}
+    InvoiceService(sql_fn=_fake_sql(rows)).decide(
+        "invoice_0058.pdf", InvoiceDecisionRequest(decision="approved"), actor="t")
+    after = InvoiceService(sql_fn=_fake_sql(rows)).list_queue(status="pending")
+    assert {i.file_name for i in after} == {"invoice_0001.pdf"}
+
+
+def test_static_sample_queue_matches_real_generated_pdfs():
+    """Regression (bug #2a): the no-backend demo queue's fields must match the
+    actual PDFs each row previews, or the extracted-fields panel and the rendered
+    document disagree. Cross-check _SAMPLE_QUEUE against the seed=42 generator."""
+    import importlib.util
+    import tempfile
+    from pathlib import Path
+
+    import pytest
+
+    # The app vendors a PARTIAL pil_workshop (no datagen), so once that package
+    # is imported we can't reach the repo's pil_workshop.datagen by path alone.
+    # Load the generator module directly from the repo's src/ under a unique name.
+    repo_src = Path(__file__).resolve().parents[3] / "src"
+    mod_path = repo_src / "pil_workshop" / "datagen" / "unstructured.py"
+    if not mod_path.exists():
+        pytest.skip(f"repo datagen not found at {mod_path}")
+    spec = importlib.util.spec_from_file_location("_pil_unstructured_for_test", mod_path)
+    unstructured = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(unstructured)
+    except Exception as exc:  # noqa: BLE001 — reportlab/numpy may be absent
+        pytest.skip(f"datagen deps unavailable off-platform: {exc}")
+
+    from backend.services.invoice_service import _SAMPLE_QUEUE
+
+    gt = {g["file_name"]: g
+          for g in unstructured.generate_invoice_pdfs(tempfile.mkdtemp(), n=60, seed=42)}
+    for row in _SAMPLE_QUEUE:
+        g = gt.get(row["file_name"])
+        assert g is not None, f"{row['file_name']} not produced by the generator"
+        assert row["invoice_no"] == g["invoice_no"]
+        assert row["customer"] == g["customer"]
+        assert row["currency"] == g["currency"]
+        assert abs(row["extracted_total"] - g["total"]) < 0.01
+        # exception_type must match the generator's ground-truth anomaly
+        assert row["exception_type"] == g["gt_anomaly"]
+
+
 # --------------------------------------------------------------------------
 # InspectionService
 # --------------------------------------------------------------------------
