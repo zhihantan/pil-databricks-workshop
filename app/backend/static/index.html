@@ -8,10 +8,79 @@
       name="description"
       content="Pacific International Lines — invoice review and container inspection, powered by Databricks."
     />
-    <script type="module" crossorigin src="/assets/index-cg9s3f_g.js"></script>
+    <!--
+      Instant initial paint. This inline shell renders immediately (no bundle
+      needed), so the user sees a branded loading screen instead of a white flash
+      while the JS parses. Colors are the workshop palette, hardcoded here since
+      the theme CSS loads with the bundle. React replaces #root's contents on
+      mount, so no cleanup is required. Kept tiny and dependency-free on purpose.
+    -->
+    <style>
+      #boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: #0b1f3a;
+        color: #f7f9fb;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      #boot .boot-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+      }
+      #boot .boot-badge {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
+        background: #0e7c86;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+      }
+      #boot .boot-ring {
+        width: 34px;
+        height: 34px;
+        border: 3px solid rgba(247, 249, 251, 0.18);
+        border-top-color: #f5a623;
+        border-radius: 50%;
+        animation: boot-spin 0.8s linear infinite;
+      }
+      #boot .boot-note {
+        font-size: 13px;
+        color: rgba(247, 249, 251, 0.6);
+      }
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot .boot-ring {
+          animation-duration: 2s;
+        }
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/index-BSapqz82.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-DUOrVKLr.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot">
+        <div class="boot-brand">
+          <span class="boot-badge">🚢</span> PIL AI Ops
+        </div>
+        <div class="boot-ring" aria-hidden="true"></div>
+        <div class="boot-note">Loading operations console…</div>
+      </div>
+    </div>
   </body>
 </html>
