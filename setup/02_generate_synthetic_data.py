@@ -47,10 +47,18 @@ dbutils.widgets.dropdown("scale", config.DEFAULT_SCALE, ["demo", "full"], "Data 
 # (grows the dataset) instead of overwriting them. "auto" = append when a base
 # load already exists, full-overwrite on the first run. "off" = always overwrite.
 dbutils.widgets.dropdown("incremental", "auto", ["auto", "off"], "Incremental append mode")
+# Size of each incremental slice, in DAYS of activity (the base is ~24 months).
+# Default 0.5 ≈ one 12-hourly run's worth (~0.07% of base per run), so the data
+# grows realistically instead of doubling each run.
+dbutils.widgets.text("increment_days", "0.5", "Incremental slice size (days)")
 
 CATALOG = safe_identifier(dbutils.widgets.get("catalog") or config.DEFAULT_CATALOG)
 SCALE = dbutils.widgets.get("scale") or config.DEFAULT_SCALE
 INCREMENTAL = dbutils.widgets.get("incremental") or "auto"
+try:
+    INCREMENT_DAYS = float(dbutils.widgets.get("increment_days") or "0.5")
+except ValueError:
+    INCREMENT_DAYS = 0.5
 BRONZE = f"`{CATALOG}`.`{config.BRONZE}`"
 RAW_PATH = config.volume_path(CATALOG, config.VOLUME_RAW)
 
@@ -97,11 +105,14 @@ if INCREMENTAL == "auto" and _table_exists(f"{BRONZE}.bookings"):
 t0 = datetime.now()
 spec = config.get_scale(SCALE)
 if APPEND:
-    banner(f"Incremental run — appending a fresh slice (id_offset={ID_OFFSET:,})", char="-")
+    banner(f"Incremental run — appending ~{INCREMENT_DAYS}-day slice "
+           f"(id_offset={ID_OFFSET:,})", char="-")
     # Dimensions are regenerated (identical, deterministic) and overwritten so
-    # nothing drifts; the event/txn tables get a NEW batch anchored at 'now'.
+    # nothing drifts; the event/txn tables get a small NEW day-sized batch
+    # anchored at 'now' (not a full re-load).
     data = datagen.generate_all(spec)                 # base (for dimension overwrite)
-    increment = datagen.generate_increment(spec, id_offset=ID_OFFSET, today=datetime.now().date())
+    increment = datagen.generate_increment(
+        spec, id_offset=ID_OFFSET, days=INCREMENT_DAYS, today=datetime.now().date())
 else:
     data = datagen.generate_all(spec)
     increment = None

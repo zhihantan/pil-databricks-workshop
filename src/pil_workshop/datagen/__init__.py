@@ -123,23 +123,47 @@ _OFFSET_STR_FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
 }
 
 
+def _daily_scale(spec: DataScale, days: float) -> DataScale:
+    """Return a copy of ``spec`` with the event/transaction volumes scaled down to
+    ``days`` worth of the ~24-month history (so one run ≈ one day of activity, not
+    a full re-load). Dimension counts (vessels/ports/routes/customers/containers/
+    voyages) are kept full so the small event batch references the whole universe.
+    """
+    from dataclasses import replace
+
+    from ..config import HISTORY_MONTHS
+
+    hist_days = max(1.0, HISTORY_MONTHS * 30.4375)
+    frac = max(0.0, days) / hist_days
+    scaled: dict[str, int] = {}
+    for field in ("voyages", "bookings", "container_events", "port_calls", "invoices"):
+        base = getattr(spec, field)
+        # keep at least a handful so a slice is never empty; round to whole rows
+        scaled[field] = max(5, round(base * frac))
+    return replace(spec, name=f"{spec.name}_daily", **scaled)
+
+
 def generate_increment(
     scale: DataScale | str | None = None,
     *,
     id_offset: int,
+    days: float = 1.0,
     today: date | None = None,
 ) -> GeneratedData:
-    """Generate a fresh, appendable batch of ONLY the event/transaction tables.
+    """Generate a fresh, appendable batch of ONLY the event/transaction tables,
+    sized to ``days`` of activity (default 1 day) rather than a full re-load.
 
     ``id_offset`` is added to every owned-PK / intra-event-FK integer (use the
-    current max id across runs, e.g. an epoch-derived block or ``MAX(id)`` read
-    from Bronze) so appended rows never collide with prior runs. Dimension FKs
-    are preserved so the new rows reference the existing base load. ``today``
-    anchors the batch's timestamps to the current run window.
+    current max id across runs, e.g. ``MAX(id)`` read from Bronze) so appended
+    rows never collide with prior runs. Dimension FKs are preserved so the new
+    rows reference the existing base load. ``today`` anchors the batch's
+    timestamps to the current run window; ``days`` controls the slice size
+    (event volumes ≈ full × days / history-days).
 
     Returns a GeneratedData holding only ``INCREMENTAL_TABLES``.
     """
-    full = generate_all(scale, today=today)
+    spec = scale if isinstance(scale, DataScale) else get_scale(scale)
+    full = generate_all(_daily_scale(spec, days), today=today)
     out = GeneratedData()
     for name in INCREMENTAL_TABLES:
         rows = [dict(r) for r in full.get(name, [])]
