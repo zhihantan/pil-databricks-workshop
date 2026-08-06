@@ -3,9 +3,14 @@
 # MAGIC # 00 · One-Click Setup — PIL Data + AI Workshop
 # MAGIC
 # MAGIC Provisions the whole workshop (phases 1–5). By default this notebook creates
-# MAGIC a **real Databricks Job** — one task per setup notebook (01–12) wired into a
-# MAGIC dependency DAG, on **serverless**, with a **daily** schedule — then triggers a
-# MAGIC run. That gives you a persistent, schedulable Workflow under **Workflows**.
+# MAGIC **two serverless Databricks Jobs** (Workflows):
+# MAGIC
+# MAGIC * **PIL Workshop — Data Setup** (recurring, every 12h) — the data + assets
+# MAGIC   pipeline: 01, 01b, 02, 03, 04, 07, 08, 11, 12. Each run refreshes the
+# MAGIC   medallion and appends an incremental data slice.
+# MAGIC * **PIL Workshop — Consumables Setup** (one-time, unscheduled) — the deploy/
+# MAGIC   serve-once surfaces: 05 dashboard, 06 Genie, 09 Lakebase, 10 app. Reads the
+# MAGIC   gold layer, so run it **once after Data Setup** has completed.
 # MAGIC
 # MAGIC **Target:** Azure Databricks · `southeastasia` · serverless.
 # MAGIC
@@ -13,13 +18,13 @@
 # MAGIC |---|---|
 # MAGIC | `catalog` | Target UC catalog (default `pil_workshop`). |
 # MAGIC | `scale` | `demo` (fast) or `full` (master-prompt volumes). |
-# MAGIC | `orchestration` | `job` (create+run a daily Job — default) or `inline` (run in-process here). |
-# MAGIC | `run_now` | For `job` mode: trigger a run immediately after creating the Job. |
-# MAGIC | `schedule_cron` / `timezone` | Daily-refresh schedule (Quartz cron). |
+# MAGIC | `orchestration` | `job` (create both Jobs — default) or `inline` (run in-process here). |
+# MAGIC | `run_now` | For `job` mode: trigger the Data Setup run immediately after creating the Jobs. |
+# MAGIC | `schedule_cron` / `timezone` | Data Setup schedule (Quartz cron; default 12-hourly). |
 # MAGIC | `skip_steps` | (inline mode) comma-separated prefixes to skip, e.g. `11,12`. |
 # MAGIC | `continue_on_error` | (inline mode) keep going when a step fails. |
 # MAGIC
-# MAGIC Re-running is **no-op-safe**: the Job is reset-in-place by name; every notebook
+# MAGIC Re-running is **no-op-safe**: each Job is reset-in-place by name; every notebook
 # MAGIC is idempotent. To remove everything, run `99_teardown`.
 
 # COMMAND ----------
@@ -152,35 +157,51 @@ else:
 # COMMAND ----------
 
 if MODE == "job":
-    banner("Creating the Databricks Job (daily schedule)")
+    banner("Creating the two Databricks Jobs")
     setup_dir = _workspace_setup_dir()
     print(f"  Notebook root: {setup_dir}")
-    print(f"  Schedule: cron='{CRON}' tz='{TZ}' (daily refresh)")
 
-    job_id = job_builder.create_or_update_job(
+    # Job 1 — recurring Data Setup (scheduled every 12h). Refreshes the medallion
+    # + assets and appends an incremental data slice each run.
+    print(f"  Data Setup schedule: cron='{CRON}' tz='{TZ}'")
+    data_job_id = job_builder.create_or_update_data_job(
         wc, setup_dir, catalog=CATALOG, scale=SCALE,
         warehouse_id=WAREHOUSE_ID, managed_location=MANAGED_LOCATION or None,
         timezone=TZ, cron=CRON, paused=False,
     )
-    url = job_builder.job_url(_host(), job_id)
-    ok(f"Job ready: {url}")
+    ok(f"Data Setup job ready: {job_builder.job_url(_host(), data_job_id)}")
+
+    # Job 2 — one-time Consumables Setup (unscheduled): dashboard, Genie, Lakebase,
+    # app. It reads the gold layer, so run it once AFTER Data Setup completes.
+    consumables_job_id = job_builder.create_or_update_consumables_job(
+        wc, setup_dir, catalog=CATALOG, scale=SCALE, warehouse_id=WAREHOUSE_ID,
+        timezone=TZ,
+    )
+    ok(f"Consumables Setup job ready (unscheduled): "
+       f"{job_builder.job_url(_host(), consumables_job_id)}")
 
     run_id = None
     if RUN_NOW:
-        run = wc.jobs.run_now(job_id=job_id)
+        run = wc.jobs.run_now(job_id=data_job_id)
         run_id = run.run_id
-        run_url = f"{_host()}/jobs/{job_id}/runs/{run_id}"
-        ok(f"Triggered run: {run_url}")
-        print("  Watch progress under Workflows → Jobs, or re-open this URL.")
+        ok(f"Triggered Data Setup run: {_host()}/jobs/{data_job_id}/runs/{run_id}")
+        print("  Watch under Workflows → Jobs. When it finishes, run the "
+              "**Consumables Setup** job once to deploy the dashboard, Genie "
+              "space, Lakebase, and app.")
+    else:
+        print("\n  Next: run **Data Setup** first, then **Consumables Setup** "
+              "once (it consumes the gold layer Data Setup produces).")
 
     try:
-        dbutils.jobs.taskValues.set(key="job_id", value=str(job_id))
+        dbutils.jobs.taskValues.set(key="data_job_id", value=str(data_job_id))
+        dbutils.jobs.taskValues.set(key="consumables_job_id", value=str(consumables_job_id))
     except Exception:  # noqa: BLE001
         pass
 
     dbutils.notebook.exit(
-        f"Job created ({job_id}) with daily schedule; "
-        f"run_now={RUN_NOW}" + (f" run_id={run_id}" if run_id else "")
+        f"Jobs created — Data Setup ({data_job_id}, 12-hourly) + "
+        f"Consumables Setup ({consumables_job_id}, one-time); "
+        f"run_now={RUN_NOW}" + (f" data_run_id={run_id}" if run_id else "")
     )
 
 # COMMAND ----------

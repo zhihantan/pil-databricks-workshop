@@ -35,7 +35,7 @@ _add_repo_src_to_path()
 
 from databricks.sdk import WorkspaceClient
 
-from pil_workshop import config
+from pil_workshop import config, job_builder
 from pil_workshop.utils import banner, ok, safe_identifier, warn
 
 dbutils.widgets.text("catalog", config.DEFAULT_CATALOG, "Catalog name")
@@ -86,6 +86,25 @@ try:
         warn("Database API absent — no Lakebase instance to delete.")
 except Exception as exc:  # noqa: BLE001
     warn(f"Lakebase delete skipped: {exc}")
+
+# COMMAND ----------
+
+# MAGIC %md ### Delete the setup Jobs
+# MAGIC The Data Setup and Consumables Setup Jobs live outside the catalog, so the
+# MAGIC CASCADE drop below won't remove them.
+
+# COMMAND ----------
+
+for _job_name in (job_builder.DATA_JOB_NAME, job_builder.CONSUMABLES_JOB_NAME):
+    try:
+        _jid = job_builder.find_job_id(wc, _job_name)
+        if _jid:
+            wc.jobs.delete(job_id=_jid)
+            ok(f"Deleted job '{_job_name}' ({_jid}).")
+        else:
+            warn(f"Job '{_job_name}' not found (nothing to delete).")
+    except Exception as exc:  # noqa: BLE001
+        warn(f"Job delete skipped for '{_job_name}': {exc}")
 
 # COMMAND ----------
 
