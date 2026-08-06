@@ -141,12 +141,17 @@ SCALES: dict[str, DataScale] = {
         ports=60,
         routes=25,
         customers=800,
-        voyages=6000,
-        containers=50000,
-        bookings=400000,
-        container_events=3000000,
-        port_calls=30000,
-        invoices=60000,
+        # Volumes halved from the original full preset (voyages 6000→3000,
+        # containers 50000→25000, bookings 400000→200000, events 3M→1.5M,
+        # port_calls 30000→15000, invoices 60000→30000). Reference dims
+        # (vessels/ports/routes/customers) stay fixed. The 12-hourly job then
+        # APPENDs a fresh incremental slice to the event/txn tables each run.
+        voyages=3000,
+        containers=25000,
+        bookings=200000,
+        container_events=1500000,
+        port_calls=15000,
+        invoices=30000,
         spare_parts_skus=5000,
         inventory_days=730,
         invoice_pdfs=200,
