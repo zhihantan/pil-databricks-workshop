@@ -169,7 +169,12 @@ if MODE == "job":
         warehouse_id=WAREHOUSE_ID, managed_location=MANAGED_LOCATION or None,
         timezone=TZ, cron=CRON, paused=False,
     )
+    # Prove the schedule is live (unpaused + running on its cron), self-healing
+    # if it was ever manually paused between setup runs.
+    _live = job_builder.ensure_schedule_unpaused(wc, data_job_id)
     ok(f"Data Setup job ready: {job_builder.job_url(_host(), data_job_id)}")
+    print(f"  Schedule: cron='{CRON}' tz='{TZ}' — "
+          f"{'UNPAUSED (live, running on schedule)' if _live else 'NO SCHEDULE'}")
 
     # Job 2 — one-time Consumables Setup (unscheduled): dashboard, Genie, Lakebase,
     # app. It reads the gold layer, so run it once AFTER Data Setup completes.

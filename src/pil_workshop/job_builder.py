@@ -236,6 +236,36 @@ def create_or_update_job(
     return created.job_id
 
 
+def ensure_schedule_unpaused(client: Any, job_id: int) -> bool:
+    """Verify job ``job_id``'s schedule is UNPAUSED; self-heal if it is paused.
+
+    ``create_or_update_job`` already writes the schedule as UNPAUSED, but this
+    reads the job BACK to *prove* it (and re-unpauses if someone manually paused
+    it between setup runs). Returns ``True`` when the schedule is confirmed
+    active, ``False`` if the job has no schedule to unpause.
+    """
+    from databricks.sdk.service import jobs as j
+
+    sched = getattr(client.jobs.get(job_id=job_id).settings, "schedule", None)
+    if sched is None:
+        LOG.warning("Job %s has no schedule to unpause.", job_id)
+        return False
+    if sched.pause_status != j.PauseStatus.UNPAUSED:
+        LOG.info("Job %s schedule was %s — unpausing.", job_id, sched.pause_status)
+        client.jobs.update(
+            job_id=job_id,
+            new_settings=j.JobSettings(
+                schedule=j.CronSchedule(
+                    quartz_cron_expression=sched.quartz_cron_expression,
+                    timezone_id=sched.timezone_id,
+                    pause_status=j.PauseStatus.UNPAUSED,
+                )
+            ),
+        )
+        sched = client.jobs.get(job_id=job_id).settings.schedule
+    return sched.pause_status == j.PauseStatus.UNPAUSED
+
+
 def create_or_update_data_job(
     client: Any,
     notebook_root: str,
@@ -248,12 +278,20 @@ def create_or_update_data_job(
     cron: str = DEFAULT_CRON,
     paused: bool = False,
 ) -> int:
-    """Create/reset the recurring **Data Setup** job (scheduled 12-hourly)."""
-    return create_or_update_job(
+    """Create/reset the recurring **Data Setup** job (scheduled 12-hourly).
+
+    When ``paused`` is False (the default) the schedule is created UNPAUSED and
+    then verified/enforced via :func:`ensure_schedule_unpaused`, so the job is
+    live and running on its cron the moment setup finishes.
+    """
+    job_id = create_or_update_job(
         client, notebook_root, name=DATA_JOB_NAME, steps=DATA_STEPS,
         catalog=catalog, scale=scale, warehouse_id=warehouse_id,
         managed_location=managed_location, timezone=timezone, cron=cron, paused=paused,
     )
+    if cron and not paused:
+        ensure_schedule_unpaused(client, job_id)
+    return job_id
 
 
 def create_or_update_consumables_job(
