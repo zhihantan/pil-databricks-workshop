@@ -133,7 +133,7 @@ SCALES: dict[str, DataScale] = {
         spare_parts_skus=1200,
         inventory_days=540,
         invoice_pdfs=60,
-        container_images=48,
+        container_images=24,
     ),
     "full": DataScale(
         name="full",
@@ -155,7 +155,11 @@ SCALES: dict[str, DataScale] = {
         spare_parts_skus=5000,
         inventory_days=730,
         invoice_pdfs=200,
-        container_images=160,
+        # Kept deliberately modest: the demo's value is REAL container photos
+        # (assets/container_samples), which notebook 07 adds alongside these.
+        # Fewer synthetic diagrams → real photos are a larger share of the
+        # gallery + accuracy eval, and the 08 vision pass is faster/cheaper.
+        container_images=40,
     ),
 }
 # Default to the FULL (master-prompt) volumes — ~10x the demo preset (6k voyages,

@@ -1,41 +1,18 @@
 {
-  "_note": "Ground-truth labels for the REAL container photos bundled in this directory. Notebook 07 copies these images into the container_images Volume alongside the synthetic set and UNIONs these labels into silver.container_image_labels, so the vision agent (notebook 08) classifies and scores them too. Schema matches the synthetic generator output: file_name, container_no, gt_damage, gt_damage_type. container_no is a descriptive placeholder (real photos have no known ISO number). See ATTRIBUTION.md for image sources/licenses.",
+  "_note": "Ground-truth labels for the REAL container photos bundled in this directory. Notebook 07 copies these images into the container_images Volume alongside the synthetic set and UNIONs these labels into silver.container_image_labels, so the vision agent (notebook 08) classifies and scores them too. Schema matches the synthetic generator output: file_name, container_no, gt_damage, gt_damage_type. container_no is a descriptive placeholder (real photos have no known ISO number). Damage labels were assigned by visual inspection of each photo. See ATTRIBUTION.md for image sources/licenses (all from Wikimedia Commons, CC/public-domain).",
   "labels": [
-    {
-      "file_name": "real_damaged_01_crushed.jpg",
-      "container_no": "REAL-DMG-01",
-      "gt_damage": "major",
-      "gt_damage_type": "dent"
-    },
-    {
-      "file_name": "real_damaged_02_bremerhaven.jpg",
-      "container_no": "REAL-DMG-02",
-      "gt_damage": "major",
-      "gt_damage_type": "dent"
-    },
-    {
-      "file_name": "real_damaged_03_broken_reefer.jpg",
-      "container_no": "REAL-DMG-03",
-      "gt_damage": "major",
-      "gt_damage_type": "door_misalignment"
-    },
-    {
-      "file_name": "real_clean_01_blue_grey.jpg",
-      "container_no": "REAL-CLN-01",
-      "gt_damage": "none",
-      "gt_damage_type": "none"
-    },
-    {
-      "file_name": "real_clean_02_40ft_docks.jpg",
-      "container_no": "REAL-CLN-02",
-      "gt_damage": "none",
-      "gt_damage_type": "none"
-    },
-    {
-      "file_name": "real_clean_03_terminal.jpg",
-      "container_no": "REAL-CLN-03",
-      "gt_damage": "none",
-      "gt_damage_type": "none"
-    }
+    {"file_name": "real_damaged_01_crushed.jpg", "container_no": "REAL-DMG-01", "gt_damage": "major", "gt_damage_type": "dent"},
+    {"file_name": "real_damaged_02_bremerhaven.jpg", "container_no": "REAL-DMG-02", "gt_damage": "major", "gt_damage_type": "dent"},
+    {"file_name": "real_damaged_03_broken_reefer.jpg", "container_no": "REAL-DMG-03", "gt_damage": "major", "gt_damage_type": "door_misalignment"},
+    {"file_name": "real_damaged_04_crushed_wall.jpg", "container_no": "REAL-DMG-04", "gt_damage": "major", "gt_damage_type": "dent"},
+    {"file_name": "real_damaged_05_breached.jpg", "container_no": "REAL-DMG-05", "gt_damage": "major", "gt_damage_type": "rust"},
+    {"file_name": "real_damaged_06_collapsed.jpg", "container_no": "REAL-DMG-06", "gt_damage": "major", "gt_damage_type": "door_misalignment"},
+    {"file_name": "real_clean_01_blue_grey.jpg", "container_no": "REAL-CLN-01", "gt_damage": "none", "gt_damage_type": "none"},
+    {"file_name": "real_clean_02_40ft_docks.jpg", "container_no": "REAL-CLN-02", "gt_damage": "none", "gt_damage_type": "none"},
+    {"file_name": "real_clean_03_terminal.jpg", "container_no": "REAL-CLN-03", "gt_damage": "none", "gt_damage_type": "none"},
+    {"file_name": "real_clean_04_maersk_rail.jpg", "container_no": "REAL-CLN-04", "gt_damage": "none", "gt_damage_type": "none"},
+    {"file_name": "real_clean_05_maersk_side.jpg", "container_no": "REAL-CLN-05", "gt_damage": "none", "gt_damage_type": "none"},
+    {"file_name": "real_clean_06_maersk_doors.jpg", "container_no": "REAL-CLN-06", "gt_damage": "none", "gt_damage_type": "none"},
+    {"file_name": "real_clean_07_maersk_reefer.jpg", "container_no": "REAL-CLN-07", "gt_damage": "none", "gt_damage_type": "none"}
   ]
 }
