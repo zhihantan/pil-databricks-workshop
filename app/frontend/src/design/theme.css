@@ -1225,3 +1225,287 @@ table.data tr:hover td {
   font-size: 13px;
   font-family: inherit;
 }
+
+/* ===== ABOUT — INTERACTIVE ARCHITECTURE ========================= */
+/* Two-column: the layered diagram (left) + a sticky detail panel (right). */
+.arch {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 980px) {
+  .arch {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* A stack of horizontal layer bands with flow connectors between them. */
+.arch-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.arch-layer {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 14px 16px 16px;
+}
+.arch-layer-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.arch-layer-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.arch-layer-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+/* the colored rail on the left edge of each layer band */
+.arch-layer {
+  position: relative;
+  overflow: hidden;
+}
+.arch-layer::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--layer-accent, var(--accent));
+}
+.arch-nodes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* the animated vertical connector between layers */
+.arch-connector {
+  align-self: center;
+  width: 2px;
+  height: 22px;
+  background: linear-gradient(var(--border), var(--accent));
+  position: relative;
+}
+.arch-connector::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translateX(-50%);
+  animation: arch-drop 1.8s ease-in-out infinite;
+}
+@keyframes arch-drop {
+  0% { top: 0; opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { top: 16px; opacity: 0; }
+}
+
+/* an individual clickable node */
+.arch-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease,
+    background 0.14s ease;
+  text-align: left;
+}
+.arch-node:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
+}
+.arch-node:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.arch-node.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.arch-node-ico {
+  font-size: 15px;
+  line-height: 1;
+}
+.arch-node-sub {
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* the sticky detail panel */
+.arch-detail {
+  position: sticky;
+  top: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 20px;
+  min-height: 260px;
+}
+@media (max-width: 980px) {
+  .arch-detail {
+    position: static;
+  }
+}
+.arch-detail-ico {
+  font-size: 26px;
+  margin-bottom: 8px;
+}
+.arch-detail-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 4px;
+}
+.arch-detail-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  padding: 3px 8px;
+  border-radius: 20px;
+  margin-bottom: 12px;
+}
+.arch-detail-desc {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink);
+  margin: 0 0 14px;
+}
+.arch-detail-facts {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.arch-detail-facts li {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.arch-detail-facts li::before {
+  content: "▸";
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.arch-detail-hint {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.arch-detail.enter {
+  animation: arch-fade 0.22s ease;
+}
+@keyframes arch-fade {
+  from { opacity: 0.35; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* tech-stack chip strip */
+.tech-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+.tech-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.tech-chip:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent);
+}
+.tech-chip .tech-ico {
+  font-size: 14px;
+}
+
+/* concept cards */
+.concept-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-top: 6px;
+}
+@media (max-width: 700px) {
+  .concept-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.concept-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 18px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.concept-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+}
+.concept-ico {
+  font-size: 22px;
+  margin-bottom: 8px;
+}
+.concept-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 6px;
+}
+.concept-desc {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--muted);
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arch-connector::after { animation: none; }
+  .arch-detail.enter { animation: none; }
+  .arch-node, .concept-card, .tech-chip { transition: none; }
+}
