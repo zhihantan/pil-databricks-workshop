@@ -160,8 +160,8 @@ export interface KpiSummary {
   invoices_processed: number;
   containers_inspected: number;
   inspection_accuracy_pct: number | null;
-  schedule_reliability_pct: number | null;
-  vessel_utilization_pct: number | null;
+  invoice_exceptions: number;
+  containers_flagged: number;
 }
 
 export interface UsageDailyPoint {

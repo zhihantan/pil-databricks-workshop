@@ -35,33 +35,44 @@ class AnalyticsService:
             pending = sum(1 for i in self._invoices.list_queue() if i.status == "pending")
         # Open work orders: Lakebase count when connected, else the demo store.
         open_wo = self._open_work_orders(settings)
-        reliability = None
-        utilization = None
         accuracy = None
         containers = 0
         invoices_done = 0
+        invoice_exceptions = 0
+        containers_flagged = 0
         if self._sql_fn:
-            reliability = _scalar(self._sql_fn,
-                f"SELECT ROUND(AVG(schedule_reliability_pct),1) v "
-                f"FROM {settings.gold}.mv_daily_operations_kpis")
-            utilization = _scalar(self._sql_fn,
-                f"SELECT ROUND(AVG(vessel_utilization_pct),1) v "
-                f"FROM {settings.gold}.mv_daily_operations_kpis")
+            # Invoice-agent KPIs come from the APP UPLOAD SINK
+            # (apps.invoice_extractions_app) — the table the upload flow writes
+            # to — so they reflect what users actually process in the app. (The
+            # batch table silver.invoice_extractions is only built by the daily
+            # job and never sees app uploads, which is why this used to never
+            # increment.) Reuse the canonical, backtick-quoted table name.
+            from pil_workshop.agent_bricks import invoice_uploads_table
+
+            inv_sink = invoice_uploads_table(settings.catalog)
+            invoices_done = int(_scalar(self._sql_fn,
+                f"SELECT COUNT(DISTINCT source_file) v FROM {inv_sink}") or 0)
+            invoice_exceptions = int(_scalar(self._sql_fn,
+                f"SELECT COUNT(DISTINCT source_file) v FROM {inv_sink} "
+                f"WHERE exception_type IS NOT NULL") or 0)
+            # Vision-agent KPIs: the scored batch gallery (has ground truth +
+            # accuracy). containers_flagged = those the agent judged damaged.
             accuracy = _scalar(self._sql_fn,
                 f"SELECT ROUND(100.0*AVG(is_correct),1) v "
                 f"FROM {settings.silver}.container_inspections_scored")
             containers = int(_scalar(self._sql_fn,
                 f"SELECT COUNT(*) v FROM {settings.silver}.container_inspections_scored") or 0)
-            invoices_done = int(_scalar(self._sql_fn,
-                f"SELECT COUNT(*) v FROM {settings.silver}.invoice_extractions") or 0)
+            containers_flagged = int(_scalar(self._sql_fn,
+                f"SELECT COUNT(*) v FROM {settings.silver}.container_inspections_scored "
+                f"WHERE LOWER(pred_damage) IN ('minor','major')") or 0)
         return KpiSummary(
             pending_reviews=pending,
             open_work_orders=open_wo,
             invoices_processed=invoices_done,
             containers_inspected=containers,
             inspection_accuracy_pct=accuracy,
-            schedule_reliability_pct=reliability if reliability is not None else 73.0,
-            vessel_utilization_pct=utilization if utilization is not None else 82.0,
+            invoice_exceptions=invoice_exceptions,
+            containers_flagged=containers_flagged,
         )
 
     def _open_work_orders(self, settings: Any) -> int:

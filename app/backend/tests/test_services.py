@@ -574,14 +574,48 @@ def test_list_inspections_guards_unexpected_damage_label():
 # --------------------------------------------------------------------------
 # AnalyticsService
 # --------------------------------------------------------------------------
-def test_kpi_summary_demo_defaults():
+def test_kpi_summary_no_sql_is_zeroed():
+    """With no warehouse, agent KPIs are 0 (no fleet-metric fallbacks anymore)."""
     inv = InvoiceService(conn_factory=None, sql_fn=None)
     svc = AnalyticsService(sql_fn=None, invoice_service=inv)
     summary = svc.kpi_summary()
-    # Falls back to demo reliability/utilization when UC not reachable.
-    assert 60 <= summary.schedule_reliability_pct <= 85
-    assert 70 <= summary.vessel_utilization_pct <= 95
-    assert summary.pending_reviews >= 1
+    assert summary.invoices_processed == 0
+    assert summary.invoice_exceptions == 0
+    assert summary.containers_flagged == 0
+    assert summary.pending_reviews >= 1  # from the demo review queue
+    # The removed fleet metrics are gone from the schema.
+    assert not hasattr(summary, "schedule_reliability_pct")
+
+
+def test_kpi_summary_agent_metrics_from_sql():
+    """Invoices-processed + exceptions come from the APP UPLOAD SINK (distinct
+    source_file), not the batch silver.invoice_extractions table; containers
+    flagged come from the scored gallery."""
+
+    def _routed(sql):
+        s = sql.lower()
+        if "invoice_extractions_app" in s:
+            # upload sink: 3 distinct invoices, 1 flagged
+            if "exception_type is not null" in s:
+                return [{"v": 1}]
+            return [{"v": 3}]
+        if "container_inspections_scored" in s:
+            if "pred_damage" in s:
+                return [{"v": 2}]        # 2 flagged damaged
+            if "avg(is_correct)" in s:
+                return [{"v": 90.0}]     # accuracy
+            return [{"v": 6}]            # containers scored
+        return [{"v": 0}]
+
+    # InvoiceService with no sql → demo queue (keeps kpi_summary's pending count
+    # independent of the routed analytics fake).
+    svc = AnalyticsService(sql_fn=_routed, invoice_service=InvoiceService(sql_fn=None))
+    k = svc.kpi_summary()
+    assert k.invoices_processed == 3
+    assert k.invoice_exceptions == 1
+    assert k.containers_inspected == 6
+    assert k.containers_flagged == 2
+    assert k.inspection_accuracy_pct == 90.0
 
 
 def test_usage_summary_from_sql():

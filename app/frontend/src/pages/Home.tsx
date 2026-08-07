@@ -54,7 +54,7 @@ export function Home() {
         />
       </div>
 
-      {/* Fleet KPI strip (context, not the focus) */}
+      {/* Agent activity strip — what the two agents have actually produced. */}
       <div className="grid grid-4">
         {kpis.isLoading ? (
           Array.from({ length: 4 }).map((_, i) => (
@@ -64,10 +64,10 @@ export function Home() {
           ))
         ) : (
           <>
-            <StatTile label="Schedule reliability" value={k?.schedule_reliability_pct ?? "—"} suffix="%" />
-            <StatTile label="Vessel utilization" value={k?.vessel_utilization_pct ?? "—"} suffix="%" />
-            <StatTile label="Open work orders" value={k?.open_work_orders ?? 0} />
             <StatTile label="Invoices processed" value={k?.invoices_processed ?? 0} />
+            <StatTile label="Invoice exceptions flagged" value={k?.invoice_exceptions ?? 0} />
+            <StatTile label="Containers analyzed" value={k?.containers_inspected ?? 0} />
+            <StatTile label="Containers flagged (damaged)" value={k?.containers_flagged ?? 0} />
           </>
         )}
       </div>

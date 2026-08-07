@@ -180,8 +180,10 @@ class KpiSummary(BaseModel):
     invoices_processed: int
     containers_inspected: int
     inspection_accuracy_pct: float | None = None
-    schedule_reliability_pct: float | None = None
-    vessel_utilization_pct: float | None = None
+    # Agent-output KPIs (replace the earlier fleet-ops metrics, which weren't
+    # produced by either agent): what the two agents have actually flagged.
+    invoice_exceptions: int = 0  # invoices the extraction agent flagged for review
+    containers_flagged: int = 0  # containers the vision agent found damaged (minor|major)
 
 
 class UsageDailyPoint(BaseModel):
