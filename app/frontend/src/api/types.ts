@@ -171,9 +171,20 @@ export interface UsageDailyPoint {
   est_cost_usd: number;
 }
 
+export interface UsageEndpointPoint {
+  endpoint: string;
+  total_tokens: number;
+  request_count: number;
+  est_cost_usd: number;
+}
+
 export interface UsageSummary {
   today_tokens: number;
   today_requests: number;
   today_cost_usd: number;
+  all_time_tokens: number;
+  all_time_requests: number;
+  all_time_cost_usd: number;
+  by_endpoint: UsageEndpointPoint[];
   series: UsageDailyPoint[];
 }

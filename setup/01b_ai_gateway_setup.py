@@ -243,6 +243,9 @@ if _usage_source_exists() and _requesters:
     # to resolve the human-readable endpoint name. Column is request_time (not
     # requesttime). The endpoint filter matches the same COALESCE expression used
     # for the `endpoint` column so it works whether or not the name resolves.
+    # NO date window — the usage views are ALL-TIME (bounded only by the system
+    # table's retention, ~12 months), so the app can show cumulative endpoint /
+    # token usage for this project's agents, not just the last 30 days.
     base = f"""
         SELECT
             CAST(u.request_time AS DATE)              AS usage_date,
@@ -255,8 +258,7 @@ if _usage_source_exists() and _requesters:
         FROM {SYSTEM_USAGE_TABLE} u
         LEFT JOIN system.serving.served_entities e
           ON u.served_entity_id = e.served_entity_id
-        WHERE u.request_time >= DATE_SUB(CURRENT_DATE(), 30)
-          AND COALESCE(e.endpoint_name, u.served_entity_id) IN ({_endpoint_in_list})
+        WHERE COALESCE(e.endpoint_name, u.served_entity_id) IN ({_endpoint_in_list})
           AND u.requester IN ({_requester_in_list})
     """
     ok(f"System usage table found — building live usage views "

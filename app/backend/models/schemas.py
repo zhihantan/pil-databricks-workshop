@@ -191,10 +191,27 @@ class UsageDailyPoint(BaseModel):
     est_cost_usd: float = 0.0
 
 
+class UsageEndpointPoint(BaseModel):
+    """All-time usage for one governed FMAPI endpoint the agents call."""
+
+    endpoint: str
+    total_tokens: int = 0
+    request_count: int = 0
+    est_cost_usd: float = 0.0
+
+
 class UsageSummary(BaseModel):
+    # Today (last day in the series) — kept for the at-a-glance tiles.
     today_tokens: int = 0
     today_requests: int = 0
     today_cost_usd: float = 0.0
+    # All-time totals for this project's agents (sum across the usage views,
+    # which are now unbounded — see notebook 01b).
+    all_time_tokens: int = 0
+    all_time_requests: int = 0
+    all_time_cost_usd: float = 0.0
+    # Per-endpoint all-time breakdown (text vs vision), largest first.
+    by_endpoint: list[UsageEndpointPoint] = Field(default_factory=list)
     series: list[UsageDailyPoint] = Field(default_factory=list)
 
 

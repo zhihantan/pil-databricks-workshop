@@ -40,9 +40,46 @@ export function Gateway() {
       ) : (
         <>
           <div className="grid grid-3">
-            <StatTile label="Tokens today" value={(u?.today_tokens ?? 0).toLocaleString()} />
-            <StatTile label="Requests today" value={u?.today_requests ?? 0} />
-            <StatTile label="Est. cost today" value={`$${(u?.today_cost_usd ?? 0).toFixed(2)}`} />
+            <StatTile label="Total tokens (all-time)" value={(u?.all_time_tokens ?? 0).toLocaleString()} />
+            <StatTile label="Total requests (all-time)" value={(u?.all_time_requests ?? 0).toLocaleString()} />
+            <StatTile label="Est. cost (all-time)" value={`$${(u?.all_time_cost_usd ?? 0).toFixed(2)}`} />
+          </div>
+
+          {/* Per-endpoint all-time breakdown — which governed endpoints the
+              agents use and how much of the token spend goes to each. */}
+          <div className="card" style={{ marginTop: 18 }}>
+            <h2 className="section-title">Usage by endpoint (all-time)</h2>
+            {(u?.by_endpoint?.length ?? 0) === 0 ? (
+              <p className="muted" style={{ margin: 0 }}>
+                No per-endpoint usage yet — run the invoice or container agents, then
+                refresh.
+              </p>
+            ) : (
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>Endpoint</th>
+                    <th style={{ textAlign: "right" }}>Requests</th>
+                    <th style={{ textAlign: "right" }}>Tokens</th>
+                    <th style={{ textAlign: "right" }}>Est. cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(u?.by_endpoint ?? []).map((e) => (
+                    <tr key={e.endpoint}>
+                      <td>{e.endpoint}</td>
+                      <td style={{ textAlign: "right" }}>
+                        {e.request_count.toLocaleString()}
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        {e.total_tokens.toLocaleString()}
+                      </td>
+                      <td style={{ textAlign: "right" }}>${e.est_cost_usd.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
 
           <div className="card" style={{ marginTop: 18 }}>

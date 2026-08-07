@@ -343,8 +343,14 @@ def test_static_sample_queue_matches_real_generated_pdfs():
 
     from backend.services.invoice_service import _SAMPLE_QUEUE
 
-    gt = {g["file_name"]: g
-          for g in unstructured.generate_invoice_pdfs(tempfile.mkdtemp(), n=60, seed=42)}
+    try:
+        # generate_invoice_pdfs lazily imports reportlab AND numpy (via datagen),
+        # so guard the CALL too — not just the module load — to skip cleanly when
+        # those optional deps aren't installed off-platform.
+        gen = unstructured.generate_invoice_pdfs(tempfile.mkdtemp(), n=60, seed=42)
+    except Exception as exc:  # noqa: BLE001 — reportlab/numpy may be absent
+        pytest.skip(f"datagen deps unavailable off-platform: {exc}")
+    gt = {g["file_name"]: g for g in gen}
     for row in _SAMPLE_QUEUE:
         g = gt.get(row["file_name"])
         assert g is not None, f"{row['file_name']} not produced by the generator"
@@ -579,13 +585,54 @@ def test_kpi_summary_demo_defaults():
 
 
 def test_usage_summary_from_sql():
-    rows = [
+    daily = [
         {"usage_date": "2026-08-01", "total_tokens": 1000, "request_count": 5,
          "est_cost_usd": 0.01},
         {"usage_date": "2026-08-02", "total_tokens": 2000, "request_count": 9,
          "est_cost_usd": 0.02},
     ]
-    svc = AnalyticsService(sql_fn=_fake_sql(rows))
+    by_ep = [
+        {"endpoint": "databricks-claude-sonnet-4-5", "total_tokens": 2500,
+         "request_count": 11, "est_cost_usd": 0.0125},
+        {"endpoint": "databricks-claude-vision", "total_tokens": 500,
+         "request_count": 3, "est_cost_usd": 0.0025},
+    ]
+
+    def _routed(sql):
+        return list(by_ep) if "v_ai_usage_by_endpoint" in sql else list(daily)
+
+    svc = AnalyticsService(sql_fn=_routed)
     usage = svc.usage_summary()
-    assert usage.today_tokens in (1000, 2000)
+    # today = last day in the series
+    assert usage.today_tokens == 2000
     assert len(usage.series) == 2
+    # all-time = sum across the whole daily history
+    assert usage.all_time_tokens == 3000
+    assert usage.all_time_requests == 14
+    assert round(usage.all_time_cost_usd, 2) == 0.03
+    # per-endpoint breakdown, largest-first as returned
+    assert [e.endpoint for e in usage.by_endpoint] == [
+        "databricks-claude-sonnet-4-5", "databricks-claude-vision"]
+    assert usage.by_endpoint[0].total_tokens == 2500
+
+
+def test_usage_summary_all_time_totals_span_full_history():
+    """Regression: all-time totals must sum the ENTIRE daily history, not just
+    the last 30 points kept for the trend chart."""
+    daily = [
+        {"usage_date": f"2026-06-{d:02d}", "total_tokens": 100, "request_count": 1,
+         "est_cost_usd": 0.001}
+        for d in range(1, 31)  # 30 days
+    ] + [
+        {"usage_date": f"2026-07-{d:02d}", "total_tokens": 100, "request_count": 1,
+         "est_cost_usd": 0.001}
+        for d in range(1, 11)  # +10 more days = 40 total
+    ]
+
+    def _routed(sql):
+        return [] if "v_ai_usage_by_endpoint" in sql else list(daily)
+
+    usage = AnalyticsService(sql_fn=_routed).usage_summary()
+    assert len(usage.series) == 30            # chart capped to last 30
+    assert usage.all_time_requests == 40      # totals span all 40 days
+    assert usage.all_time_tokens == 4000

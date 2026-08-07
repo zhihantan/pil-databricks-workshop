@@ -10,7 +10,12 @@ from typing import Any
 
 from backend.core.config import get_settings
 from backend.core.logging import get_logger
-from backend.models.schemas import KpiSummary, UsageDailyPoint, UsageSummary
+from backend.models.schemas import (
+    KpiSummary,
+    UsageDailyPoint,
+    UsageEndpointPoint,
+    UsageSummary,
+)
 from backend.services import demo_store
 
 LOG = get_logger("backend.analytics_service")
@@ -82,22 +87,44 @@ class AnalyticsService:
     def usage_summary(self) -> UsageSummary:
         settings = get_settings()
         series: list[UsageDailyPoint] = []
+        all_rows: list[dict[str, Any]] = []
+        by_endpoint: list[UsageEndpointPoint] = []
         if self._sql_fn:
+            # Full daily history (all-time). We take the whole series for the
+            # totals and keep the most recent 30 points for the trend chart.
             try:
-                rows = list(self._sql_fn(
+                all_rows = list(self._sql_fn(
                     f"SELECT CAST(usage_date AS STRING) usage_date, "
                     f"COALESCE(total_tokens,0) total_tokens, "
                     f"COALESCE(request_count,0) request_count, "
                     f"COALESCE(est_cost_usd,0) est_cost_usd "
-                    f"FROM {settings.gold}.v_ai_usage_daily ORDER BY usage_date DESC LIMIT 30"))
-                series = [UsageDailyPoint(**r) for r in reversed(rows)]
+                    f"FROM {settings.gold}.v_ai_usage_daily ORDER BY usage_date"))
             except Exception as exc:  # noqa: BLE001
-                LOG.warning("Usage read failed: %s", exc)
-        today = series[-1] if series else UsageDailyPoint(usage_date="today")
+                LOG.warning("Usage daily read failed: %s", exc)
+            # Per-endpoint all-time breakdown (text vs vision), largest first.
+            try:
+                ep_rows = list(self._sql_fn(
+                    f"SELECT endpoint, "
+                    f"COALESCE(total_tokens,0) total_tokens, "
+                    f"COALESCE(request_count,0) request_count, "
+                    f"COALESCE(est_cost_usd,0) est_cost_usd "
+                    f"FROM {settings.gold}.v_ai_usage_by_endpoint "
+                    f"WHERE endpoint IS NOT NULL ORDER BY total_tokens DESC"))
+                by_endpoint = [UsageEndpointPoint(**r) for r in ep_rows]
+            except Exception as exc:  # noqa: BLE001
+                LOG.warning("Usage by-endpoint read failed: %s", exc)
+
+        daily = [UsageDailyPoint(**r) for r in all_rows]
+        series = daily[-30:]  # trend chart shows the most recent 30 days
+        today = daily[-1] if daily else UsageDailyPoint(usage_date="today")
         return UsageSummary(
             today_tokens=today.total_tokens,
             today_requests=today.request_count,
             today_cost_usd=today.est_cost_usd,
+            all_time_tokens=sum(d.total_tokens for d in daily),
+            all_time_requests=sum(d.request_count for d in daily),
+            all_time_cost_usd=round(sum(d.est_cost_usd for d in daily), 2),
+            by_endpoint=by_endpoint,
             series=series,
         )
 
