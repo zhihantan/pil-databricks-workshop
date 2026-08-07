@@ -205,8 +205,11 @@ except Exception as exc:  # noqa: BLE001
 IMAGE_LOCAL = "/" + IMAGE_PATH.lstrip("/")
 try:
     # List images via dbutils.fs (reliable on Volumes) rather than glob, which is
-    # unreliable on the FUSE mount in some serverless contexts.
-    img_files = [f.name for f in dbutils.fs.ls(IMAGE_PATH) if f.name.endswith(".png")]
+    # unreliable on the FUSE mount in some serverless contexts. Include real
+    # photos (JPG/WEBP), not just the synthetic PNGs, so they're classified too.
+    _IMG_EXTS = (".png", ".jpg", ".jpeg", ".webp")
+    img_files = [f.name for f in dbutils.fs.ls(IMAGE_PATH)
+                 if f.name.lower().endswith(_IMG_EXTS)]
     print(f"  Found {len(img_files)} images under {IMAGE_PATH}")
     rows = agent_bricks.classify_container_images(
         IMAGE_LOCAL, endpoints.vision, llm, file_names=img_files

@@ -279,6 +279,53 @@ def generate_container_images(
     return gt
 
 
+def copy_real_container_images(samples_dir: str, out_dir: str) -> list[dict[str, Any]]:
+    """Copy the bundled REAL container photos into ``out_dir`` and return their
+    ground-truth label records (same schema as :func:`generate_container_images`).
+
+    ``samples_dir`` is the repo's ``assets/container_samples`` directory, which
+    holds the photos plus a ``labels.json`` mapping each file to its ground truth.
+    These real photos AUGMENT the synthetic set — they land in the same
+    container_images Volume and their labels are unioned into
+    ``silver.container_image_labels`` so the vision agent classifies and scores
+    them too. Best-effort: if the samples dir or labels file is missing, returns
+    an empty list (the synthetic set still stands), so setup never halts.
+
+    Only files listed in ``labels.json`` are copied (so an un-attributed image
+    dropped into the folder is ignored until it's labelled).
+    """
+    import json
+    import shutil
+
+    labels_path = os.path.join(samples_dir, "labels.json")
+    if not os.path.isfile(labels_path):
+        return []
+    try:
+        with open(labels_path) as fh:
+            spec = json.load(fh)
+        records = spec.get("labels", []) if isinstance(spec, dict) else list(spec)
+    except (ValueError, OSError):
+        return []
+
+    os.makedirs(out_dir, exist_ok=True)
+    out: list[dict[str, Any]] = []
+    for rec in records:
+        fname = rec.get("file_name")
+        if not fname:
+            continue
+        src = os.path.join(samples_dir, fname)
+        if not os.path.isfile(src):
+            continue  # labelled but the image isn't present — skip quietly
+        shutil.copyfile(src, os.path.join(out_dir, fname))
+        out.append({
+            "file_name": fname,
+            "container_no": rec.get("container_no"),
+            "gt_damage": rec.get("gt_damage"),
+            "gt_damage_type": rec.get("gt_damage_type") or "none",
+        })
+    return out
+
+
 def _draw_damage(d, severity, dtype, cx0, cy0, cx1, cy1, rng) -> None:
     """Overlay a physically-plausible damage effect onto the container body.
 

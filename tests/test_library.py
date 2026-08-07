@@ -96,6 +96,33 @@ def test_invoices_have_expected_anomaly_share():
     assert 0.04 <= len(anomalies) / len(invs) <= 0.16
 
 
+def test_bundled_real_container_photos_copy_with_matching_label_schema():
+    """The bundled REAL container photos (assets/container_samples) must copy into
+    the images Volume and carry the SAME label schema as the synthetic set, so
+    notebook 07 can union them into silver.container_image_labels."""
+    import os
+    import tempfile
+    from pathlib import Path
+
+    from pil_workshop.datagen import unstructured
+
+    samples = Path(__file__).resolve().parents[1] / "assets" / "container_samples"
+    if not (samples / "labels.json").is_file():
+        pytest.skip("bundled real photos not present")
+
+    out = tempfile.mkdtemp()
+    recs = unstructured.copy_real_container_images(str(samples), out)
+    assert recs, "no real photos copied"
+    synth_keys = {"file_name", "container_no", "gt_damage", "gt_damage_type"}
+    for r in recs:
+        assert set(r.keys()) == synth_keys
+        assert r["gt_damage"] in ("none", "minor", "major")
+        # the labelled file must actually have been copied to the volume dir
+        assert os.path.isfile(os.path.join(out, r["file_name"]))
+    # missing dir degrades gracefully (setup never halts)
+    assert unstructured.copy_real_container_images("/no/such/dir", tempfile.mkdtemp()) == []
+
+
 def test_invoice_pdf_numbers_are_stable_across_runs():
     """Regression (bug #2b): invoice_no / issue_date must NOT drift with the wall
     clock. Notebook 07 regenerates the PDFs on every 12-hourly run, but the

@@ -106,11 +106,26 @@ print(f"  Deliberate anomalies: {n_anom} "
 
 os.makedirs(IMAGE_DIR, exist_ok=True)
 image_gt = unstructured.generate_container_images(IMAGE_DIR, spec.container_images, seed=SEED)
-ok(f"Wrote {len(image_gt)} container images → {IMAGE_DIR}")
+ok(f"Wrote {len(image_gt)} synthetic container images → {IMAGE_DIR}")
+
+# Augment with the bundled REAL container photos (assets/container_samples) so
+# the gallery + accuracy eval include genuine photos, not only synthetic
+# diagrams. They land in the SAME Volume; their labels are unioned below. The
+# repo root was resolved into sys.path above; derive it from the pil_workshop
+# package location so this works both locally and in the workspace Git folder.
+_repo_root = os.path.dirname(os.path.dirname(os.path.dirname(config.__file__)))
+_samples_dir = os.path.join(_repo_root, "assets", "container_samples")
+real_gt = unstructured.copy_real_container_images(_samples_dir, IMAGE_DIR)
+if real_gt:
+    ok(f"Copied {len(real_gt)} real container photos from {_samples_dir}")
+else:
+    print(f"  No real photos found at {_samples_dir} (synthetic set only).")
+
+image_gt = image_gt + real_gt  # union: synthetic + real, same label schema
 from collections import Counter
 
 dist = Counter(r["gt_damage"] for r in image_gt)
-print(f"  Damage distribution: {dict(dist)}")
+print(f"  Damage distribution ({len(image_gt)} total): {dict(dist)}")
 
 # COMMAND ----------
 
@@ -131,12 +146,13 @@ ok("Ground-truth tables: invoice_pdf_ground_truth, container_image_labels")
 
 # COMMAND ----------
 
+_IMG_EXTS = (".png", ".jpg", ".jpeg", ".webp")
 pdfs = [f.name for f in dbutils.fs.ls(config.volume_path(CATALOG, config.VOLUME_INVOICES))
         if f.name.endswith(".pdf")]
 imgs = [f.name for f in dbutils.fs.ls(config.volume_path(CATALOG, config.VOLUME_IMAGES))
-        if f.name.endswith(".png")]
+        if f.name.lower().endswith(_IMG_EXTS)]
 print(f"  Volume invoices: {len(pdfs)} PDFs")
-print(f"  Volume images:   {len(imgs)} PNGs")
+print(f"  Volume images:   {len(imgs)} images (synthetic PNG + real JPG)")
 
 dbutils.notebook.exit(
     f"07 complete · {len(invoice_gt)} invoices · {len(image_gt)} images"
