@@ -6,6 +6,8 @@ plus the decision/work-order logic. Run: ``pytest app/backend/tests``.
 
 from __future__ import annotations
 
+import pytest
+
 from backend.models.schemas import InvoiceDecisionRequest, WorkOrderRequest
 from backend.services.analytics_service import AnalyticsService
 from backend.services.inspection_service import InspectionService
@@ -325,8 +327,6 @@ def test_static_sample_queue_matches_real_generated_pdfs():
     import tempfile
     from pathlib import Path
 
-    import pytest
-
     # The app vendors a PARTIAL pil_workshop (no datagen), so once that package
     # is imported we can't reach the repo's pil_workshop.datagen by path alone.
     # Load the generator module directly from the repo's src/ under a unique name.
@@ -465,9 +465,13 @@ def test_save_and_analyze_uploads_and_returns_metrics():
     m = r["metrics"]
     assert m["duration_ms"] >= m["analyze_ms"] and m["est_total_tokens"] > 0
     assert m["model_endpoint"] == "vision-ep"
-    # Persisted one row to the container Delta sink (parameterized INSERT).
-    assert len(writes) == 1
-    sql, params = writes[0]
+    # Persisted to the container Delta sink. The write set self-heals first
+    # (CREATE SCHEMA + CREATE TABLE IF NOT EXISTS on a fresh workspace) and then
+    # the parameterized INSERT — the INSERT is the LAST write.
+    assert len(writes) == 3
+    assert writes[0][0].startswith("CREATE SCHEMA IF NOT EXISTS")
+    assert "CREATE TABLE IF NOT EXISTS" in writes[1][0]
+    sql, params = writes[-1]
     assert "container_inspections_app" in sql and sql.strip().upper().startswith("INSERT")
     assert params["file_name"] == "cont.png" and params["damage"] == "major"
     assert params["model_endpoint"] == "vision-ep"
@@ -492,6 +496,66 @@ def test_save_and_analyze_survives_persist_failure():
     svc = InspectionService(workspace_client=_FakeWC(), write_fn=_boom)
     r = svc.save_and_analyze("c.png", b"%PNGbytes", "ep", FakeLLM())
     assert r["damage"] == "none"  # analysis still returned despite write failure
+
+
+def test_save_and_analyze_fails_loudly_without_workspace_client():
+    """The response promises an image_url served from the Volume, so if the
+    image can't be saved the call must raise — not analyze-without-saving and
+    leave the gallery thumbnail 404ing."""
+    class FakeLLM:
+        def chat(self, messages, **kwargs):  # pragma: no cover - must not run
+            raise AssertionError("must not analyze when the save cannot happen")
+
+    svc = InspectionService(workspace_client=None)
+    with pytest.raises(RuntimeError, match="cannot save the image"):
+        svc.save_and_analyze("c.png", b"%PNGbytes", "ep", FakeLLM())
+
+
+def test_refresh_one_persists_when_file_name_given():
+    """A re-analysis (/refresh) with a file_name persists to the sink so the
+    gallery reflects the fresh result (uploads win the file-name dedup); the
+    write set self-heals the schema/table first, then INSERTs."""
+    class FakeLLM:
+        def chat(self, messages, **kwargs):
+            return '{"damage":"major","damage_type":"dent","confidence":0.9,' \
+                   '"recommended_action":"remove from service"}'
+
+    writes: list = []
+    svc = InspectionService(write_fn=lambda sql, params: writes.append((sql, params)))
+    result = svc.refresh_one(b"%PNGbytes", "ep", FakeLLM(), file_name="../x/shared.png")
+    assert result["damage"] == "major"
+    sql, params = writes[-1]
+    assert sql.strip().upper().startswith("INSERT")
+    assert params["file_name"] == "shared.png"  # basename only, persisted
+
+
+def test_refresh_one_without_file_name_does_not_persist():
+    """The plain refresh (no file_name) must not write — that's the batch
+    re-analysis path and would otherwise pollute the upload sink."""
+    class FakeLLM:
+        def chat(self, messages, **kwargs):
+            return '{"damage":"none","damage_type":"none","confidence":0.9,' \
+                   '"recommended_action":"release"}'
+
+    writes: list = []
+    svc = InspectionService(write_fn=lambda sql, params: writes.append((sql, params)))
+    svc.refresh_one(b"%PNGbytes", "ep", FakeLLM())
+    assert writes == []
+
+
+def test_refresh_one_survives_persist_failure():
+    """A persist error on re-analysis must never fail the returned result."""
+    class FakeLLM:
+        def chat(self, messages, **kwargs):
+            return '{"damage":"minor","damage_type":"rust","confidence":0.7,' \
+                   '"recommended_action":"flag"}'
+
+    def _boom(sql, params):
+        raise RuntimeError("no MODIFY grant")
+
+    svc = InspectionService(write_fn=_boom)
+    result = svc.refresh_one(b"%PNGbytes", "ep", FakeLLM(), file_name="x.png")
+    assert result["damage"] == "minor"  # result returned despite write failure
 
 
 def test_list_inspections_merges_uploads_over_batch_and_dedups():

@@ -42,11 +42,34 @@ def _ensure_pil_workshop_importable() -> None:
 _ensure_pil_workshop_importable()
 
 
+def _safe_catalog() -> str:
+    """Resolve + validate the catalog name from ``PIL_CATALOG``.
+
+    The catalog is interpolated into the ``silver``/``gold`` SQL identifiers, so
+    validate it as a simple identifier to prevent a stray backtick/dot from
+    breaking queries or injecting. A malformed env value falls back to the
+    default (with a warning) rather than crashing the app at import time.
+    """
+    raw = os.environ.get("PIL_CATALOG", "pil_workshop")
+    try:
+        from pil_workshop.utils import safe_identifier
+
+        return safe_identifier(raw)
+    except Exception:  # noqa: BLE001 — invalid identifier or utils unavailable
+        import logging
+
+        if raw != "pil_workshop":
+            logging.getLogger("backend.config").warning(
+                "PIL_CATALOG=%r is not a safe SQL identifier; using 'pil_workshop'.", raw
+            )
+        return "pil_workshop"
+
+
 @dataclass(frozen=True)
 class Settings:
     """Resolved app settings."""
 
-    catalog: str = field(default_factory=lambda: os.environ.get("PIL_CATALOG", "pil_workshop"))
+    catalog: str = field(default_factory=_safe_catalog)
     lakebase_instance: str = field(
         default_factory=lambda: os.environ.get("PIL_LAKEBASE_INSTANCE", "pil-workshop-db")
     )

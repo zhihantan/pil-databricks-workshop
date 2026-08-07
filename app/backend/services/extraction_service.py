@@ -256,10 +256,20 @@ class ExtractionService:
             return None
         from pil_workshop.agent_bricks import (
             INVOICE_UPLOAD_COLUMNS,
+            build_invoice_uploads_ddl,
             invoice_uploads_table,
         )
 
-        table = invoice_uploads_table(get_settings().catalog)
+        catalog = get_settings().catalog
+        # Self-heal: create the schema + sink if they don't exist yet (fresh
+        # workspace where notebook 08's sink step hasn't run). Best-effort — both
+        # are IF NOT EXISTS, so a no-op when they already exist.
+        try:
+            self._write_fn(f"CREATE SCHEMA IF NOT EXISTS `{catalog}`.`apps`", None)
+            self._write_fn(build_invoice_uploads_ddl(catalog), None)
+        except Exception as exc:  # noqa: BLE001
+            LOG.info("Could not ensure invoice sink exists (continuing): %s", exc)
+        table = invoice_uploads_table(catalog)
         # Map the assembled result to each column (result key = column, with a
         # few renames handled here).
         values = {
@@ -463,7 +473,7 @@ def _norm_currency(v: Any) -> str | None:
 def _non_null_field_count(nested: dict[str, Any]) -> int:
     """Count populated top-level fields (line_items counted as one if present)."""
     n = 0
-    for k, v in nested.items():
+    for v in nested.values():
         if v in (None, "", [], {}):
             continue
         n += 1

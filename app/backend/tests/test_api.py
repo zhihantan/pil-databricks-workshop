@@ -32,6 +32,54 @@ def test_health():
     assert "lakebase" in body
 
 
+def test_health_ok_when_warehouse_reachable_even_without_lakebase(monkeypatch):
+    """UC-only (no Lakebase) is a supported mode: health keys on warehouse
+    reachability, not Lakebase. Warehouse up + Lakebase down → still 'ok'."""
+    import backend.routers.health as health
+
+    monkeypatch.setattr(health, "sql_connection_target", lambda: ("host", "/path"))
+    monkeypatch.setattr(health, "lakebase_available", lambda: False)
+    body = client.get("/api/health").json()
+    assert body["status"] == "ok"
+    assert body["lakebase"] is False  # reported as informational sub-status
+
+
+def test_health_degraded_when_no_warehouse(monkeypatch):
+    """No SQL warehouse means UC reads + extraction can't work → degraded,
+    regardless of Lakebase."""
+    import backend.routers.health as health
+
+    monkeypatch.setattr(health, "sql_connection_target", lambda: None)
+    monkeypatch.setattr(health, "lakebase_available", lambda: True)
+    body = client.get("/api/health").json()
+    assert body["status"] == "degraded"
+
+
+def test_safe_catalog_accepts_valid_identifier(monkeypatch):
+    from backend.core.config import _safe_catalog
+
+    monkeypatch.setenv("PIL_CATALOG", "my_catalog2")
+    assert _safe_catalog() == "my_catalog2"
+
+
+def test_safe_catalog_defaults_when_unset(monkeypatch):
+    from backend.core.config import _safe_catalog
+
+    monkeypatch.delenv("PIL_CATALOG", raising=False)
+    assert _safe_catalog() == "pil_workshop"
+
+
+def test_safe_catalog_rejects_injection_and_falls_back(monkeypatch):
+    """A malformed PIL_CATALOG (dot/backtick/hyphen) is interpolated into
+    silver/gold SQL identifiers, so it must fall back to the safe default rather
+    than break queries or inject."""
+    from backend.core.config import _safe_catalog
+
+    for bad in ("a.b", "cat`; DROP", "has-hyphen", "1leading_digit", ""):
+        monkeypatch.setenv("PIL_CATALOG", bad)
+        assert _safe_catalog() == "pil_workshop"
+
+
 def test_list_invoices():
     r = client.get("/api/invoices")
     assert r.status_code == 200

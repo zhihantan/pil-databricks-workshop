@@ -144,11 +144,16 @@ class InspectionService:
                 "confusions": confusions}
 
     def refresh_one(self, image_bytes: bytes, endpoint: str,
-                    llm_module: Any) -> dict[str, Any]:
+                    llm_module: Any, file_name: str | None = None) -> dict[str, Any]:
         """Classify a single image via the governed vision endpoint.
 
         ``llm_module`` is injected (``pil_workshop.llm``) so tests can mock the
         model call. Returns the parsed inspection dict.
+
+        When ``file_name`` is given, the fresh result is PERSISTED to the upload
+        sink so a re-analysis is reflected in the gallery (uploads win the
+        file-name dedup over the stale batch row). Best-effort — a persist
+        failure never fails the re-analysis.
         """
         from pil_workshop.agent_bricks import (
             INSPECTION_SCHEMA,
@@ -182,7 +187,25 @@ class InspectionService:
                 "json_schema": {"name": "inspection", "schema": INSPECTION_SCHEMA},
             },
         )
-        return _parse_inspection(raw)
+        result = _parse_inspection(raw)
+        if file_name:
+            import os as _os
+
+            safe = _os.path.basename(file_name)
+            analysis = {
+                "file_name": safe,
+                "volume_path": f"/Volumes/{get_settings().catalog}/bronze/"
+                               f"container_images/{safe}",
+                "damage": result.get("damage"),
+                "damage_type": result.get("damage_type"),
+                "confidence": _to_float(result.get("confidence")),
+                "recommended_action": result.get("recommended_action"),
+            }
+            try:
+                self._persist(analysis, result, endpoint, _VISION_IMAGE_TOKENS)
+            except Exception as exc:  # noqa: BLE001
+                LOG.warning("Persist of refreshed inspection failed: %s", exc)
+        return result
 
     def save_and_analyze(
         self, file_name: str, content: bytes, endpoint: str, llm_module: Any
@@ -201,9 +224,16 @@ class InspectionService:
         safe = os.path.basename(file_name)
         vol_path = f"/Volumes/{settings.catalog}/bronze/container_images/{safe}"
 
+        # The response promises an image_url served from this Volume path, so the
+        # save MUST succeed — otherwise the gallery thumbnail 404s. Fail loudly
+        # rather than analyze-without-saving.
+        if self._wc is None:
+            raise RuntimeError(
+                "No Databricks workspace client; cannot save the image to the "
+                "container_images Volume."
+            )
         t0 = time.perf_counter()
-        if self._wc is not None:
-            self._wc.files.upload(vol_path, io.BytesIO(content), overwrite=True)
+        self._wc.files.upload(vol_path, io.BytesIO(content), overwrite=True)
         save_ms = int((time.perf_counter() - t0) * 1000)
 
         t1 = time.perf_counter()
@@ -256,10 +286,20 @@ class InspectionService:
             return
         from pil_workshop.agent_bricks import (
             CONTAINER_UPLOAD_COLUMNS,
+            build_container_uploads_ddl,
             container_uploads_table,
         )
 
-        table = container_uploads_table(get_settings().catalog)
+        catalog = get_settings().catalog
+        # Self-heal: create the schema + sink if they don't exist yet (e.g. on a
+        # fresh workspace where notebook 08's sink step hasn't run). Best-effort —
+        # both are IF NOT EXISTS, so a no-op when they already exist.
+        try:
+            self._write_fn(f"CREATE SCHEMA IF NOT EXISTS `{catalog}`.`apps`", None)
+            self._write_fn(build_container_uploads_ddl(catalog), None)
+        except Exception as exc:  # noqa: BLE001
+            LOG.info("Could not ensure container sink exists (continuing): %s", exc)
+        table = container_uploads_table(catalog)
         values = {
             "file_name": analysis.get("file_name"),
             "volume_path": analysis.get("volume_path"),

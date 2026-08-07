@@ -130,7 +130,9 @@ def refresh(
 
         endpoints = llm.endpoints()
         data, _ = img
-        result = svc.refresh_one(data, endpoints.vision, llm)
+        # Pass file_name so the fresh result persists to the sink and the gallery
+        # reflects the re-analysis (not the stale batch row).
+        result = svc.refresh_one(data, endpoints.vision, llm, file_name=file_name)
         return {"file_name": file_name, "result": result}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(

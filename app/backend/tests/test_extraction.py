@@ -247,3 +247,45 @@ def test_persist_skipped_when_no_write_fn():
     svc = ExtractionService(workspace_client=wc, sql_fn=_sql_fn_returning(flat, nested))
     r = svc.process_upload("y.pdf", b"%PDF")
     assert r["saved_table"] is None  # no write_fn → persist skipped, still returns
+
+
+def test_persist_self_heals_schema_and_table_then_inserts():
+    """On a fresh workspace where notebook 08's sink step hasn't run, the persist
+    creates the apps schema + sink (IF NOT EXISTS) before the INSERT — the INSERT
+    is the LAST write."""
+    wc = _FakeWC()
+    writes: list = []
+    flat = {"invoice_no": "INV-11", "currency": "USD", "total": "5.00"}
+    nested = {"purchase_order": "PO11", "subtotal": 5.0, "tax": 0.0, "total": 5.0,
+              "line_items": []}
+    svc = ExtractionService(
+        workspace_client=wc, sql_fn=_sql_fn_returning(flat, nested),
+        write_fn=lambda sql, params: writes.append((sql, params)),
+    )
+    r = svc.process_upload("w.pdf", b"%PDF")
+    assert r["saved_table"].endswith("`invoice_extractions_app`")
+    assert writes[0][0].startswith("CREATE SCHEMA IF NOT EXISTS")
+    assert "CREATE TABLE IF NOT EXISTS" in writes[1][0]
+    assert writes[-1][0].startswith("INSERT INTO")
+
+
+def test_persist_survives_self_heal_failure_and_still_inserts():
+    """If the SP lacks CREATE (schema/table already exist), the self-heal error
+    is swallowed and the INSERT still runs — the extraction is never lost."""
+    wc = _FakeWC()
+    inserts: list = []
+
+    def _write(sql, params):
+        if sql.strip().upper().startswith("CREATE"):
+            raise RuntimeError("PERMISSION_DENIED: no CREATE on schema apps")
+        inserts.append((sql, params))
+
+    flat = {"invoice_no": "INV-12", "currency": "USD", "total": "5.00"}
+    nested = {"purchase_order": "PO12", "subtotal": 5.0, "tax": 0.0, "total": 5.0,
+              "line_items": []}
+    svc = ExtractionService(
+        workspace_client=wc, sql_fn=_sql_fn_returning(flat, nested), write_fn=_write
+    )
+    r = svc.process_upload("v.pdf", b"%PDF")
+    assert r["saved_table"].endswith("`invoice_extractions_app`")
+    assert len(inserts) == 1 and inserts[0][0].startswith("INSERT INTO")
