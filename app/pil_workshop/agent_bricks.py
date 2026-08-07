@@ -209,6 +209,7 @@ def _maybe_downscale(data: bytes) -> tuple[bytes, str]:
         return data, media
     try:
         import io
+
         from PIL import Image
 
         img = Image.open(io.BytesIO(data))

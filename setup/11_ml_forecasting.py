@@ -415,7 +415,7 @@ with mlflow.start_run(run_id=parent_run_id):
         mlflow.log_artifact(p, artifact_path="reports")
     if eval_metrics:
         mlflow.log_metrics({f"eval_{k}": v for k, v in eval_metrics.items()})
-ok(f"Logged 4 plots/tables to the parent run's 'reports' artifact path.")
+ok("Logged 4 plots/tables to the parent run's 'reports' artifact path.")
 
 # COMMAND ----------
 

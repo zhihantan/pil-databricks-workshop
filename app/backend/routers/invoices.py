@@ -11,13 +11,13 @@ from backend.core.auth import current_user_email
 from backend.core.config import get_settings
 from backend.core.logging import get_logger
 from backend.deps import get_extraction_service, get_invoice_service
-from backend.services.clients import workspace_client
 from backend.models.schemas import (
     ExtractedInvoice,
     InvoiceDecisionRequest,
     InvoiceQueueItem,
     ProcessedInvoice,
 )
+from backend.services.clients import workspace_client
 from backend.services.extraction_service import ExtractionService
 from backend.services.invoice_service import InvoiceService
 

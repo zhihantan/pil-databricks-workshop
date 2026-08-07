@@ -149,32 +149,41 @@ leg) before reaching for a full NLP solver.
 
 ---
 
-## Orchestration — the daily Databricks Job
+## Orchestration — two Databricks Jobs
 
-By default `00_setup_all` (`orchestration=job`) provisions a real, schedulable
-**Databricks Job / Workflow** via `src/pil_workshop/job_builder.py`:
+By default `00_setup_all` (`orchestration=job`) provisions **two** real,
+schedulable **Databricks Jobs / Workflows** via `src/pil_workshop/job_builder.py`,
+splitting the pipeline by cadence:
 
-- **One task per setup notebook** (01–12) wired into a dependency DAG — e.g.
-  `01 → 02 → 03 → 04 → {05, 06}` and the app chain `07 → 08 → 09 → 10`, with the
-  ML tasks (`11`, `12`) fanning out after silver. `max_concurrent_runs=1`.
+- **PIL Workshop — Data Setup** (recurring): the 9 data/assets/agents/ML tasks —
+  `01`, `01b`, `02`, `03`, `04`, `07`, `08`, `11`, `12` — wired into a dependency
+  DAG (`01 → 02 → 03 → 04`, `01 → 01b → 04`, the unstructured/agent chain
+  `07 → 08`, and the ML tasks `11`, `12` fanning out after silver). Runs on a
+  **`CronSchedule` every 12 hours** (default `0 0 0/12 * * ?` Asia/Singapore),
+  created **unpaused**, so the data refreshes on a schedule.
+- **PIL Workshop — Consumables Setup** (one-time, unscheduled): the 4
+  deploy/serve-once surfaces — `05` dashboard, `06` Genie space, `09` Lakebase,
+  `10` app. These read the gold layer the Data Setup job produces, so run Data
+  Setup first. Cross-job dependency edges are intentionally dropped (a Databricks
+  task can't depend on another Job's task); the notebooks are idempotent and
+  fail-soft if an input isn't ready yet.
 - **Serverless** notebook tasks sharing one environment (`environment_version 3`,
   deps `PyYAML` + `openai`); notebooks 07/11/12 add their own heavy deps via a
   pinned `%pip` (ortools uses `--no-deps` to avoid clobbering the runtime's
   numpy/pandas).
-- A **daily `CronSchedule`** (default `0 0 3 * * ?` Asia/Singapore) so the whole
-  workshop refreshes every morning.
 - **Create-or-update by name** (`jobs.reset`), so re-running `00_setup_all` never
-  creates duplicate Jobs.
+  creates duplicate Jobs. In `job` mode, `run_now` triggers the Data Setup job;
+  run Consumables Setup once after it completes.
 
 An `orchestration=inline` widget keeps the original in-session
 `dbutils.notebook.run` path for quick single runs.
 
-> This pipeline was validated end-to-end on a live serverless workspace: a fresh
-> `run_now` completes with all 13 tasks green, and every asset below is created
-> (verified: 17 silver tables, 4 MVs, 9 metric views, 3 usage views, the
-> dashboard, Genie space, invoice extractions + exceptions, container inspections
-> with a real damage-classification accuracy, Lakebase queue, demand forecasts,
-> and the repositioning plan). Live-run fixes are logged in `docs/code_review.md`.
+> This pipeline was validated end-to-end on a live serverless workspace: fresh
+> runs of both Jobs complete green, and every asset below is created (verified:
+> 17 silver tables, 4 MVs, 9 metric views, 3 usage views, the dashboard, Genie
+> space, invoice extractions + exceptions, container inspections with a real
+> damage-classification accuracy, Lakebase queue, demand forecasts, and the
+> repositioning plan). Live-run fixes are logged in `docs/code_review.md`.
 
 ## Idempotency & teardown
 

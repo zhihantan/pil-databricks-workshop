@@ -157,7 +157,9 @@ def test_invoice_pdf_numbers_are_stable_across_runs():
     finally:
         unstructured.date = orig
 
-    key = lambda g: (g["invoice_no"], g["issue_date"], g["total"], g["gt_anomaly"])
+    def key(g):
+        return (g["invoice_no"], g["issue_date"], g["total"], g["gt_anomaly"])
+
     assert [key(g) for g in gt_2030] == [key(g) for g in gt_2020]
     # And the year embedded in invoice_no reflects the FIXED anchor, not 2030/2020.
     years = {g["invoice_no"].split("-")[1] for g in gt_2030}

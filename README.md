@@ -64,11 +64,13 @@ brainstorm, and design assumptions.
 1. **Clone** this repo into Databricks: *Workspace → Repos → Add Repo* (or Git
    Folders), pointing at your fork.
 2. **Open** `setup/00_setup_all.py`.
-3. **Run all** — after the preflight checks it creates a **daily Databricks Job**
-   (one task per notebook 01–12, serverless, scheduled) and triggers a run; watch
-   it under **Workflows**. It prints the Job URL and every created asset. (Prefer
-   an in-session run? Set the `orchestration` widget to `inline`. Choose
-   `scale=demo` for a fast first run.)
+3. **Run all** — after the preflight checks it creates **two Databricks Jobs**
+   (serverless): **Data Setup** (the recurring data/agents/ML pipeline, scheduled
+   every 12h) and **Consumables Setup** (the one-time dashboard/Genie/Lakebase/app
+   deploy). It triggers the Data Setup run and prints both Job URLs and every
+   created asset; run **Consumables Setup** once after Data Setup finishes. Watch
+   both under **Workflows**. (Prefer an in-session run? Set the `orchestration`
+   widget to `inline`. Choose `scale=demo` for a fast first run.)
 4. **Explore Part 1**: open the **PIL Operations** dashboard and the **Genie**
    space; try the Genie Code lab in [`genie_code/`](genie_code/).
 5. **Deploy Part 2**: build the app frontend (`cd app/frontend && npm install &&
@@ -87,7 +89,7 @@ To remove everything: run `setup/99_teardown.py` (set the `confirm` widget).
 
 | Path | What |
 |---|---|
-| `setup/` | Numbered setup notebooks (`00_setup_all` orchestrates 01–12; `99_teardown`). |
+| `setup/` | Numbered setup notebooks (`00_setup_all` builds two Jobs — Data Setup + Consumables Setup; `99_teardown`). |
 | `src/pil_workshop/` | Shared library: `config`, `llm` (FMAPI single source of truth), `dbx_api`, data generators, silver/gold builders, `ml/`. |
 | `assets/` | Dashboard JSON, Genie config, metric-view YAML. |
 | `genie_code/` | Genie Code agent skill + prompt library. |
