@@ -21,6 +21,7 @@
 # MAGIC | `orchestration` | `job` (create both Jobs — default) or `inline` (run in-process here). |
 # MAGIC | `run_now` | For `job` mode: trigger the Data Setup run immediately after creating the Jobs. |
 # MAGIC | `schedule_cron` / `timezone` | Data Setup schedule (Quartz cron; default 12-hourly). |
+# MAGIC | `increment_days` | Size of the incremental data slice each recurring run appends (days of activity; default 30). |
 # MAGIC | `skip_steps` | (inline mode) comma-separated prefixes to skip, e.g. `11,12`. |
 # MAGIC | `continue_on_error` | (inline mode) keep going when a step fails. |
 # MAGIC
@@ -66,6 +67,10 @@ dbutils.widgets.text("schedule_cron", job_builder.DEFAULT_CRON, "Data Setup sche
 dbutils.widgets.text("timezone", job_builder.DEFAULT_TIMEZONE, "Schedule timezone")
 dbutils.widgets.text("skip_steps", "", "Skip steps (inline mode, e.g. 11,12)")
 dbutils.widgets.dropdown("continue_on_error", "false", ["true", "false"], "Continue on error (inline)")
+# Size of the incremental data slice appended on each recurring Data Setup run
+# (notebook 02). Default = config.DEFAULT_INCREMENT_DAYS.
+dbutils.widgets.text(
+    "increment_days", str(config.DEFAULT_INCREMENT_DAYS), "Incremental slice size (days)")
 # Optional: only needed on Azure "Default Storage" metastores that have no
 # storage root, where a plain CREATE CATALOG fails. Set to an external-location
 # path you have a storage credential for; passed to notebook 01 only.
@@ -80,6 +85,11 @@ TZ = dbutils.widgets.get("timezone") or job_builder.DEFAULT_TIMEZONE
 SKIP = {s.strip() for s in dbutils.widgets.get("skip_steps").split(",") if s.strip()}
 CONTINUE = dbutils.widgets.get("continue_on_error") == "true"
 MANAGED_LOCATION = (dbutils.widgets.get("managed_location") or "").strip()
+try:
+    INCREMENT_DAYS = float(
+        dbutils.widgets.get("increment_days") or config.DEFAULT_INCREMENT_DAYS)
+except ValueError:
+    INCREMENT_DAYS = config.DEFAULT_INCREMENT_DAYS
 
 wc = WorkspaceClient()
 banner("PIL Data + AI Workshop — One-Click Setup")
@@ -167,6 +177,7 @@ if MODE == "job":
     data_job_id = job_builder.create_or_update_data_job(
         wc, setup_dir, catalog=CATALOG, scale=SCALE,
         warehouse_id=WAREHOUSE_ID, managed_location=MANAGED_LOCATION or None,
+        increment_days=INCREMENT_DAYS,
         timezone=TZ, cron=CRON, paused=False,
     )
     # Prove the schedule is live (unpaused + running on its cron), self-healing
@@ -232,7 +243,8 @@ STEPS = [
     ("12", "12_ml_route_optimization", 900),
 ]
 
-BASE_ARGS = {"catalog": CATALOG, "scale": SCALE}
+BASE_ARGS = {"catalog": CATALOG, "scale": SCALE,
+             "increment_days": str(INCREMENT_DAYS)}
 if MANAGED_LOCATION:
     # Only notebook 01 reads managed_location; harmless to pass to all in inline
     # mode since the others ignore unknown args.

@@ -96,6 +96,67 @@ def test_invoices_have_expected_anomaly_share():
     assert 0.04 <= len(anomalies) / len(invs) <= 0.16
 
 
+def test_generate_increment_returns_only_incremental_tables_with_offset_ids():
+    """The incremental batch holds only the event/txn tables, and its owned PKs
+    are shifted past ``id_offset`` so appended rows never collide with the base."""
+    from datetime import date
+
+    off = 5_000_000
+    inc = datagen.generate_increment("demo", id_offset=off, days=7,
+                                     today=date(2026, 8, 8))
+    assert set(inc.keys()) <= set(datagen.INCREMENTAL_TABLES)
+    assert inc.get("bookings"), "expected a non-empty incremental slice"
+    assert min(b["booking_id"] for b in inc["bookings"]) > off
+    # Business-key strings are re-keyed off the offset PK so they stay unique.
+    assert all(b["booking_no"] == f"BKG{b['booking_id']:08d}" for b in inc["bookings"])
+    assert all(i["invoice_no"].startswith("INV-") for i in inc["invoices"])
+    # Dimension FKs are preserved (unshifted) so they resolve against the base.
+    base = datagen.generate_all("demo", today=date(2026, 8, 8))
+    customer_ids = {c["customer_id"] for c in base["customers"]}
+    assert all(b["customer_id"] in customer_ids for b in inc["bookings"])
+
+
+def test_generate_increment_is_date_confined_to_recent_window():
+    """A windowed increment dates its rows in the recent tail (not scattered
+    across the full ~24-month history) so dashboard growth is visible."""
+    from datetime import date, datetime, timedelta
+
+    today = date(2026, 8, 8)
+    _, end = config.history_window(today)
+    days = 30
+    inc = datagen.generate_increment("full", id_offset=1, days=days, today=today)
+    bdates = [datetime.fromisoformat(b["booking_ts"]).date() for b in inc["bookings"]]
+    # Every appended booking falls within (recent-window + generation slack) of
+    # the window end — none land months/years back like the base load does.
+    cutoff = end - timedelta(days=days + 40)
+    assert min(bdates) >= cutoff, f"rows leaked before the recent window: {min(bdates)}"
+
+
+def test_generate_increment_scales_with_days():
+    """Slice row counts scale ~linearly with ``days`` (the tunable lever)."""
+    from datetime import date
+
+    today = date(2026, 8, 8)
+    small = datagen.generate_increment("full", id_offset=1, days=7, today=today)
+    big = datagen.generate_increment("full", id_offset=1, days=30, today=today)
+    r = len(big["bookings"]) / max(len(small["bookings"]), 1)
+    assert 3.0 <= r <= 5.5, f"expected ~4.3x more rows at 30d vs 7d, got {r:.1f}x"
+
+
+def test_full_window_generation_unchanged_by_window_feature():
+    """Regression: the base load (no window_start) still spans the FULL history,
+    so the recent-window feature can't have altered default generation."""
+    from datetime import date, datetime, timedelta
+
+    today = date(2026, 8, 8)
+    start, end = config.history_window(today)
+    d = datagen.generate_all("demo", today=today)
+    vdates = sorted(datetime.fromisoformat(v["departure_date"]).date()
+                    for v in d["voyages"])
+    # Earliest voyage is far back (full spread), not clustered near the end.
+    assert vdates[0] < end - timedelta(days=400)
+
+
 def test_bundled_real_container_photos_copy_with_matching_label_schema():
     """The bundled REAL container photos (assets/container_samples) must copy into
     the images Volume and carry the SAME label schema as the synthetic set, so

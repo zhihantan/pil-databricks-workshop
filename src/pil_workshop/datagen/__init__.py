@@ -8,10 +8,10 @@ importable and unit-testable off-platform.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
-from ..config import DataScale, get_scale
+from ..config import DataScale, get_scale, history_window
 from . import inventory, invoices, reference, transactions
 from .iso6346 import container_number, is_valid
 
@@ -36,11 +36,19 @@ class GeneratedData(dict):
         return {k: len(v) for k, v in self.items()}
 
 
-def generate_all(scale: DataScale | str | None = None, today: date | None = None) -> GeneratedData:
+def generate_all(
+    scale: DataScale | str | None = None,
+    today: date | None = None,
+    window_start: date | None = None,
+) -> GeneratedData:
     """Generate the full coherent dataset for a scale.
 
     Order matters: reference entities first, then transactions that reference
     them, then invoices (from bookings) and inventory (independent).
+
+    ``window_start`` (optional) narrows voyage departure dates to
+    ``[window_start, end]`` (used by the incremental append path so the fresh
+    slice is dated recently); ``None`` spreads them over the full history.
     """
     spec = scale if isinstance(scale, DataScale) else get_scale(scale)
 
@@ -49,7 +57,8 @@ def generate_all(scale: DataScale | str | None = None, today: date | None = None
     routes = reference.gen_routes(spec.routes, ports)
     customers = reference.gen_customers(spec.customers, ports)
 
-    voyages, legs = transactions.gen_voyages_and_legs(spec, vessels, routes, ports, today)
+    voyages, legs = transactions.gen_voyages_and_legs(
+        spec, vessels, routes, ports, today, window_start=window_start)
     containers = transactions.gen_containers(spec)
     bookings, shipments = transactions.gen_bookings_and_shipments(
         spec, voyages, legs, customers, containers, ports, today
@@ -160,10 +169,18 @@ def generate_increment(
     timestamps to the current run window; ``days`` controls the slice size
     (event volumes ≈ full × days / history-days).
 
+    The batch is also DATE-CONFINED to the last ``days`` of the window (voyage
+    departures sampled from ``[end - days, end]``), so the appended rows show up
+    as recent activity — the dashboard's latest dates visibly grow each run —
+    rather than being scattered across the full ~24-month history.
+
     Returns a GeneratedData holding only ``INCREMENTAL_TABLES``.
     """
     spec = scale if isinstance(scale, DataScale) else get_scale(scale)
-    full = generate_all(_daily_scale(spec, days), today=today)
+    _, end = history_window(today)
+    # Confine the slice to the recent window so growth is visible at the tail.
+    window_start = end - timedelta(days=int(max(1, round(days))))
+    full = generate_all(_daily_scale(spec, days), today=today, window_start=window_start)
     out = GeneratedData()
     for name in INCREMENTAL_TABLES:
         rows = [dict(r) for r in full.get(name, [])]

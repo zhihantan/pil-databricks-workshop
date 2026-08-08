@@ -168,6 +168,13 @@ SCALES: dict[str, DataScale] = {
 # token consumption end-to-end. Switch back to "demo" for a fast, low-cost run.
 DEFAULT_SCALE = "full"
 
+# Incremental append slice size, in DAYS of activity, used by the recurring Data
+# Setup job (notebook 02) on every run after the first full load. At `full`
+# scale ~30 days ≈ 8k bookings + ~62k container events + ~1.2k invoices per run,
+# date-confined to the recent window so the dashboard's latest dates visibly
+# grow each 12-hourly run. Lower it for a lighter cadence; raise it for more.
+DEFAULT_INCREMENT_DAYS = 30.0
+
 
 def get_scale(name: str | None = None) -> DataScale:
     """Return the :class:`DataScale` for ``name`` (falls back to the default)."""

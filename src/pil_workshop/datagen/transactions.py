@@ -72,14 +72,25 @@ def gen_voyages_and_legs(
     routes: list[dict[str, Any]],
     ports: list[dict[str, Any]],
     today: date | None = None,
+    window_start: date | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Generate voyages and their leg-level ETD/ETA/ATD/ATA with realistic delays.
 
     Reliability is engineered: each leg arrival is "on time" with probability
     ``p_on_time`` (~0.74) so schedule-reliability lands in the 60–85% band.
+
+    ``window_start`` (optional) narrows where voyage start dates (``etd0``) are
+    sampled from: when given, departures fall in ``[window_start, end]`` instead
+    of the full ~24-month history. The incremental append path uses this so a
+    fresh slice is dated in the RECENT window (visible daily growth) rather than
+    scattered across the whole history. ``None`` = full-window (the base load).
     """
     rng = _rng(1001)
     start, end = history_window(today)
+    if window_start is not None:
+        # Clamp into the history window; the recent slice starts no earlier than
+        # the base window's start and no later than a day before the end.
+        start = max(start, min(window_start, end - timedelta(days=1)))
     port_by_id = {p["port_id"]: p for p in ports}
 
     voyages: list[dict[str, Any]] = []
@@ -96,10 +107,15 @@ def gen_voyages_and_legs(
         if len(rotation) < 2:
             continue
         voyage_id += 1
-        # Random start somewhere in the window.
+        # Random start somewhere in the window. Reserve a tail so a multi-leg
+        # voyage can finish inside the window; for a NARROW recent window (the
+        # incremental slice) the reserve shrinks to half the span so departures
+        # still spread across it instead of piling on the first day. For the full
+        # base window (span ~730d) this stays 40, so the base load is unchanged.
         span_days = (end - start).days
+        reserve = min(40, max(0, span_days // 2))
         etd0 = datetime.combine(
-            start + timedelta(days=int(rng.integers(0, max(1, span_days - 40)))),
+            start + timedelta(days=int(rng.integers(0, max(1, span_days - reserve)))),
             datetime.min.time(),
         ) + timedelta(hours=int(rng.integers(0, 24)))
 

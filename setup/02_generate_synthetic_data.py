@@ -48,17 +48,21 @@ dbutils.widgets.dropdown("scale", config.DEFAULT_SCALE, ["demo", "full"], "Data 
 # load already exists, full-overwrite on the first run. "off" = always overwrite.
 dbutils.widgets.dropdown("incremental", "auto", ["auto", "off"], "Incremental append mode")
 # Size of each incremental slice, in DAYS of activity (the base is ~24 months).
-# Default 0.5 ≈ one 12-hourly run's worth (~0.07% of base per run), so the data
-# grows realistically instead of doubling each run.
-dbutils.widgets.text("increment_days", "0.5", "Incremental slice size (days)")
+# Default = config.DEFAULT_INCREMENT_DAYS (30) ≈ ~8k bookings + ~62k events per
+# run at full scale, date-confined to the recent window so the latest dates grow
+# visibly each run. The Data Setup job passes this through; lower it for a
+# lighter cadence.
+dbutils.widgets.text(
+    "increment_days", str(config.DEFAULT_INCREMENT_DAYS), "Incremental slice size (days)")
 
 CATALOG = safe_identifier(dbutils.widgets.get("catalog") or config.DEFAULT_CATALOG)
 SCALE = dbutils.widgets.get("scale") or config.DEFAULT_SCALE
 INCREMENTAL = dbutils.widgets.get("incremental") or "auto"
 try:
-    INCREMENT_DAYS = float(dbutils.widgets.get("increment_days") or "0.5")
+    INCREMENT_DAYS = float(
+        dbutils.widgets.get("increment_days") or config.DEFAULT_INCREMENT_DAYS)
 except ValueError:
-    INCREMENT_DAYS = 0.5
+    INCREMENT_DAYS = config.DEFAULT_INCREMENT_DAYS
 BRONZE = f"`{CATALOG}`.`{config.BRONZE}`"
 RAW_PATH = config.volume_path(CATALOG, config.VOLUME_RAW)
 

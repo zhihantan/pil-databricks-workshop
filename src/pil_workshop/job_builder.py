@@ -114,6 +114,7 @@ def build_job_settings(
     scale: str,
     warehouse_id: str | None = None,
     managed_location: str | None = None,
+    increment_days: float | None = None,
     timezone: str = DEFAULT_TIMEZONE,
     cron: str | None = DEFAULT_CRON,
     paused: bool = False,
@@ -129,6 +130,10 @@ def build_job_settings(
     ``managed_location`` (optional) is passed to the catalog task only; set it
     for Azure "Default Storage" metastores that have no storage root, where a
     plain ``CREATE CATALOG`` fails and a ``MANAGED LOCATION`` is required.
+
+    ``increment_days`` (optional) is passed to the data-generation task only; it
+    sizes the incremental slice appended on each recurring run (see notebook 02).
+    ``None`` leaves the notebook's own default in effect.
     """
     from databricks.sdk.service import compute as c
     from databricks.sdk.service import jobs as j
@@ -143,6 +148,9 @@ def build_job_settings(
         # Only the catalog-creation task understands managed_location.
         if managed_location and step.key == "01_catalog":
             params["managed_location"] = managed_location
+        # Only the data-generation task understands increment_days.
+        if increment_days is not None and step.key == "02_data":
+            params["increment_days"] = str(increment_days)
         task = j.Task(
             task_key=step.key,
             description=f"PIL setup: {step.notebook}",
@@ -206,6 +214,7 @@ def create_or_update_job(
     scale: str,
     warehouse_id: str | None = None,
     managed_location: str | None = None,
+    increment_days: float | None = None,
     timezone: str = DEFAULT_TIMEZONE,
     cron: str | None = DEFAULT_CRON,
     paused: bool = False,
@@ -214,6 +223,7 @@ def create_or_update_job(
     settings = build_job_settings(
         notebook_root, name=name, steps=steps, catalog=catalog, scale=scale,
         warehouse_id=warehouse_id, managed_location=managed_location,
+        increment_days=increment_days,
         timezone=timezone, cron=cron, paused=paused,
     )
     existing = find_job_id(client, settings.name)
@@ -274,6 +284,7 @@ def create_or_update_data_job(
     scale: str,
     warehouse_id: str | None = None,
     managed_location: str | None = None,
+    increment_days: float | None = None,
     timezone: str = DEFAULT_TIMEZONE,
     cron: str = DEFAULT_CRON,
     paused: bool = False,
@@ -283,11 +294,15 @@ def create_or_update_data_job(
     When ``paused`` is False (the default) the schedule is created UNPAUSED and
     then verified/enforced via :func:`ensure_schedule_unpaused`, so the job is
     live and running on its cron the moment setup finishes.
+
+    ``increment_days`` (optional) sizes the incremental slice the data-generation
+    task appends on each recurring run; ``None`` uses the notebook default.
     """
     job_id = create_or_update_job(
         client, notebook_root, name=DATA_JOB_NAME, steps=DATA_STEPS,
         catalog=catalog, scale=scale, warehouse_id=warehouse_id,
-        managed_location=managed_location, timezone=timezone, cron=cron, paused=paused,
+        managed_location=managed_location, increment_days=increment_days,
+        timezone=timezone, cron=cron, paused=paused,
     )
     if cron and not paused:
         ensure_schedule_unpaused(client, job_id)
