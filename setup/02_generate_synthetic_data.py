@@ -92,7 +92,8 @@ APPEND = False
 ID_OFFSET = 0
 if INCREMENTAL == "auto" and _table_exists(f"{BRONZE}.bookings"):
     try:
-        _pk = {"bookings": "booking_id", "shipments": "shipment_id",
+        _pk = {"voyages": "voyage_id", "voyage_legs": "leg_id",
+               "bookings": "booking_id", "shipments": "shipment_id",
                "container_events": "event_id", "port_calls": "port_call_id",
                "invoices": "invoice_id", "invoice_line_items": "line_item_id"}
         maxes = []

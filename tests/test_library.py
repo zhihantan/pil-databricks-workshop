@@ -116,6 +116,65 @@ def test_generate_increment_returns_only_incremental_tables_with_offset_ids():
     assert all(b["customer_id"] in customer_ids for b in inc["bookings"])
 
 
+def test_increment_voyages_and_legs_are_incremental_with_valid_fks():
+    """Voyages + legs are incremental (so fleet-ops KPIs advance each run). Their
+    offset ids must not collide with the base load, and every FK that points at a
+    voyage/leg (legs→voyages, bookings→voyages/legs, port_calls→voyages) must
+    resolve WITHIN the appended batch — while fixed-dimension FKs stay put."""
+    from datetime import date
+
+    today = date(2026, 8, 8)
+    base = datagen.generate_all("full", today=today)
+    base_vids = {v["voyage_id"] for v in base["voyages"]}
+    base_lids = {leg["leg_id"] for leg in base["voyage_legs"]}
+    # Notebook 02 offsets by MAX+1 across ALL incremental PKs (leg_id and
+    # booking_id run much higher than voyage_id), so mirror that here.
+    base_max = max(
+        max(v["voyage_id"] for v in base["voyages"]),
+        max(leg["leg_id"] for leg in base["voyage_legs"]),
+        max(b["booking_id"] for b in base["bookings"]),
+    )
+
+    off = base_max + 1  # mirrors notebook 02's MAX(id)+1 across incremental PKs
+    inc = datagen.generate_increment("full", id_offset=off, days=30, today=today)
+
+    # voyages + legs are now part of the incremental batch
+    assert inc.get("voyages") and inc.get("voyage_legs")
+    inc_vids = {v["voyage_id"] for v in inc["voyages"]}
+    inc_lids = {leg["leg_id"] for leg in inc["voyage_legs"]}
+
+    # no collision with base + strictly offset above it
+    assert inc_vids.isdisjoint(base_vids) and inc_lids.isdisjoint(base_lids)
+    assert min(inc_vids) > base_max
+
+    # FK integrity WITHIN the batch
+    assert all(leg["voyage_id"] in inc_vids for leg in inc["voyage_legs"])
+    assert all(b["voyage_id"] in inc_vids for b in inc["bookings"])
+    assert all(b["leg_id"] in inc_lids for b in inc["bookings"])
+    assert all(p["voyage_id"] in inc_vids for p in inc["port_calls"])
+
+    # fixed-dimension FKs unchanged (resolve against the base universe)
+    base_ports = {p["port_id"] for p in base["ports"]}
+    assert all(leg["origin_port_id"] in base_ports for leg in inc["voyage_legs"])
+
+    # voyage_no re-keyed off the offset id but keeps its service-code prefix
+    for v in inc["voyages"]:
+        assert v["voyage_no"].rsplit("-", 1)[1] == f"{v['voyage_id']:05d}"
+        assert v["voyage_no"].rsplit("-", 1)[0]  # non-empty prefix
+
+
+def test_increment_legs_reach_recent_window_for_fleet_ops():
+    """Incremental voyage_legs must be dated in the recent window so the fleet-ops
+    MV (which dates off leg eta) advances toward today each run."""
+    from datetime import date, datetime, timedelta
+
+    today = date(2026, 8, 8)
+    inc = datagen.generate_increment("full", id_offset=1, days=30, today=today)
+    etas = [datetime.fromisoformat(leg["eta"]).date() for leg in inc["voyage_legs"]]
+    assert max(etas) >= today - timedelta(days=3), "legs not reaching ~today"
+    assert min(etas) >= today - timedelta(days=90), "legs leaked far back"
+
+
 def test_generate_increment_is_date_confined_to_recent_window():
     """A windowed increment dates its rows in the recent tail (not scattered
     across the full ~24-month history) so dashboard growth is visible."""

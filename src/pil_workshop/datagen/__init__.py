@@ -95,17 +95,19 @@ def generate_all(
 # ---------------------------------------------------------------------------
 # Incremental append support (for the 12-hourly job).
 #
-# Reference/dimension tables (ports, vessels, routes, customers, containers,
-# voyages, voyage_legs, spare_parts) are STABLE across runs — they overwrite.
-# The event/transaction tables below GROW: each run generates a fresh batch and
-# appends it. To keep the appended rows genuinely new AND referentially valid,
-# we (a) generate a batch anchored at the CURRENT run window (so timestamps are
-# fresh), then (b) offset the primary keys the event/txn tables OWN, plus the
-# foreign keys that point BETWEEN those event/txn tables — while leaving foreign
-# keys that point at the fixed dimension tables (voyage_id, leg_id, container_id,
-# customer_id, *_port_id) UNCHANGED so they still resolve against the base load.
+# STABLE dimension tables (ports, vessels, routes, customers, containers,
+# spare_parts) are regenerated identically and overwrite each run. The
+# event/transaction tables below GROW: each run generates a fresh batch and
+# appends it. Voyages and voyage_legs are ALSO incremental (added so the fleet-
+# ops KPIs, which date off voyage_legs.eta, advance each run) — they own their
+# PKs and the append offsets those, plus every FK that points BETWEEN incremental
+# tables. FKs that point at the FIXED dimensions (container_id, customer_id,
+# vessel_id, route_id, *_port_id) are left UNCHANGED so they still resolve
+# against the base load.
 # ---------------------------------------------------------------------------
 INCREMENTAL_TABLES: tuple[str, ...] = (
+    "voyages",
+    "voyage_legs",
     "bookings",
     "shipments",
     "container_events",
@@ -115,17 +117,22 @@ INCREMENTAL_TABLES: tuple[str, ...] = (
 )
 
 # Per table: integer PKs the table OWNS + integer FKs that reference ANOTHER
-# incremental table (both get offset). Everything else (dimension FKs, business
-# strings, timestamps, measures) is left as generated.
+# incremental table (both get offset by the SAME shared id_offset, so a FK still
+# points at its owner within the same batch). Everything else (fixed-dimension
+# FKs, business strings, timestamps, measures) is left as generated.
 _OFFSET_INT_FIELDS: dict[str, tuple[str, ...]] = {
-    "bookings": ("booking_id",),
-    "shipments": ("shipment_id", "booking_id"),          # booking_id → bookings (incremental)
+    "voyages": ("voyage_id",),
+    "voyage_legs": ("leg_id", "voyage_id"),               # voyage_id → voyages (incremental)
+    "bookings": ("booking_id", "voyage_id", "leg_id"),    # voyage_id/leg_id → voyages/legs (incremental)
+    "shipments": ("shipment_id", "booking_id"),           # booking_id → bookings (incremental)
     "container_events": ("event_id", "shipment_id"),      # shipment_id → shipments (incremental)
-    "port_calls": ("port_call_id",),
+    "port_calls": ("port_call_id", "voyage_id"),          # voyage_id → voyages (incremental)
     "invoices": ("invoice_id", "booking_id"),             # booking_id → bookings (incremental)
     "invoice_line_items": ("line_item_id", "invoice_id"),  # invoice_id → invoices (incremental)
 }
-# Business-key strings that embed the PK and so must be re-suffixed to stay unique.
+# Business-key strings that embed the PK and so must be re-suffixed to stay
+# unique. Simple templates re-key off the (offset) owning PK; ``voyage_no`` keeps
+# its per-row service-code prefix, so it is re-keyed specially below.
 _OFFSET_STR_FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
     "bookings": (("booking_no", "BKG{n:08d}"),),
     "invoices": (("invoice_no", "INV-{n:d}"),),  # base uses INV-<year>-<seq>; we re-key by offset id
@@ -135,8 +142,10 @@ _OFFSET_STR_FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
 def _daily_scale(spec: DataScale, days: float) -> DataScale:
     """Return a copy of ``spec`` with the event/transaction volumes scaled down to
     ``days`` worth of the ~24-month history (so one run ≈ one day of activity, not
-    a full re-load). Dimension counts (vessels/ports/routes/customers/containers/
-    voyages) are kept full so the small event batch references the whole universe.
+    a full re-load). Voyages are scaled too (they are incremental — see
+    ``INCREMENTAL_TABLES``). The fixed dimensions
+    (vessels/ports/routes/customers/containers) stay full so the small batch's
+    dimension FKs still reference the whole base universe.
     """
     from dataclasses import replace
 
@@ -195,6 +204,12 @@ def generate_increment(
                 pk = int_fields[0]
                 if r.get(pk) is not None:
                     r[f] = tmpl.format(n=r[pk])
+            # voyage_no embeds the voyage_id after a per-row service-code prefix
+            # (e.g. "SVC-00042"); re-suffix the numeric part off the offset id so
+            # it stays unique without dropping the prefix.
+            if name == "voyages" and r.get("voyage_id") is not None:
+                prefix = str(r.get("voyage_no", "")).rsplit("-", 1)[0]
+                r["voyage_no"] = f"{prefix}-{int(r['voyage_id']):05d}"
         out[name] = rows
     return out
 

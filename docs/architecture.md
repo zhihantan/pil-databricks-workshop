@@ -161,12 +161,17 @@ splitting the pipeline by cadence:
   `07 → 08`, and the ML tasks `11`, `12` fanning out after silver). Runs on a
   **`CronSchedule` every 12 hours** (default `0 0 0/12 * * ?` Asia/Singapore),
   created **unpaused**, so the data refreshes on a schedule. After the first
-  (full) load, each run **appends an incremental slice** of event/transaction
-  data (`bookings`, `shipments`, `container_events`, `port_calls`, `invoices`,
-  `invoice_line_items`) sized by the `increment_days` widget (default 30 days of
-  activity) and date-confined to the recent window, so the dataset visibly grows
-  and the latest dates advance each run. Dimensions and imagery overwrite in
-  place. See notebook `02`'s `incremental` / `increment_days` widgets.
+  (full) load, each run **appends an incremental slice** of the voyage +
+  event/transaction tables (`voyages`, `voyage_legs`, `bookings`, `shipments`,
+  `container_events`, `port_calls`, `invoices`, `invoice_line_items`) sized by
+  the `increment_days` widget (default 30 days of activity) and date-confined to
+  the recent window — so the dataset visibly grows and the latest dates advance
+  each run across BOTH the commercial KPIs and the fleet-ops KPIs (which date off
+  `voyage_legs.eta`). Appended rows get offset primary keys so they never collide
+  with the base load, and FKs pointing between incremental tables are offset in
+  lockstep while fixed-dimension FKs (vessels/ports/routes/customers/containers)
+  resolve against the base. Fixed dimensions and imagery overwrite in place. See
+  notebook `02`'s `incremental` / `increment_days` widgets.
 - **PIL Workshop — Consumables Setup** (one-time, unscheduled): the 4
   deploy/serve-once surfaces — `05` dashboard, `06` Genie space, `09` Lakebase,
   `10` app. These read the gold layer the Data Setup job produces, so run Data
